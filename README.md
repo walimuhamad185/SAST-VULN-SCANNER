@@ -13,3 +13,4 @@ git clone https://github.com/walimuhamad185/SAST-VULN-SCANNER.git
 cd SAST-VULN-SCANNER
 python3 sast_agent.py --file <target_file>
 ```
+<img width="1899" height="901" alt="SAST Security Audit Report - Profile 1 - Microsoft​ Edge 6_23_2026 7_49_03 AM" src="https://github.com/user-attachments/assets/03e66629-0de9-4eea-88bc-60cc62e64f82" />
