@@ -25,16 +25,12 @@ client = OpenAI(
 # the verdict.
 # ---------------------------------------------------------------------------
 
-# Only accept an exact, clean verdict prefix. Anything else => INCONCLUSIVE.
 _VALID_VERDICTS = ("REAL VULNERABILITY", "FALSE ALARM")
 
-# Strip comment/instruction-like lines that are the dominant injection vector.
 _INSTRUCTION_STRIP = re.compile(
     r'(?im)^\s*(#|//|/\*|\*|<!--|;|rem\s+).*$'
 )
-# Remove non-printable / control characters.
 _CONTROL_CHARS = re.compile(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]')
-# Max chars of evidence passed to the model.
 MAX_EVIDENCE_LEN = 300
 
 
@@ -80,7 +76,6 @@ def deep_security_scan(target_folder):
 
     print(f"[*] Universal Scanning initiated on: {target_folder}")
 
-    # Advanced Multi-Language & Infrastructure Rules
     rules = {
         "Hardcoded Secret/Token": r'(?i)(password|passwd|secret|api_key|jwt_secret|auth_token|private_key|aws_secret|token)\s*=\s*[\'"][a-zA-Z0-9_\-+=/]{8,}[\'"]',
         "Command Injection Risk": r'(exec\(|eval\(|system\(|child_process\.exec|subprocess\.Popen|sh\(|os\.system|popen\()',
@@ -92,15 +87,13 @@ def deep_security_scan(target_folder):
     }
 
     for root, dirs, files in os.walk(target_folder):
-        # Heavy data directories skip karne ke liye
         if any(ignored in root for ignored in ['venv', '.git', 'node_modules', 'dist', 'build', '__pycache__']):
             continue
 
         for file in files:
             file_path = os.path.join(root, file)
             try:
-                # Binary files ya boht bari files ko skip karne ke liye size check
-                if os.path.getsize(file_path) > 5 * 1024 * 1024:  # 5MB Limit
+                if os.path.getsize(file_path) > 5 * 1024 * 1024:
                     continue
 
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
@@ -244,7 +237,6 @@ def main():
             print(f"[{index}/{total_raw}] Analyzing Vector: {issue['rule']}")
             print(f"📍 Location: {issue['file']} (Line: {issue['line']})")
 
-            # CWE-94 FIX: sanitize -> delimited data block -> strict verdict parsing
             evidence = sanitize_evidence(issue["code"])
             tight_prompt = build_classification_prompt(issue["rule"], evidence)
 
@@ -257,8 +249,6 @@ def main():
                 issue["analysis"] = ai_analysis
                 verified_threat_list.append(issue)
             elif verdict == "INCONCLUSIVE":
-                # Fail safe: surface an INCONCLUSIVE result instead of
-                # silently trusting a filtered "safe" classification.
                 print("\033[93m[⚠ INCONCLUSIVE - needs manual review]\033[0m")
                 issue["analysis"] = "INCONCLUSIVE: model output not parseable; manual review required."
                 verified_threat_list.append(issue)
