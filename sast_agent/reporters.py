@@ -1,4 +1,4 @@
-"""Output generators: interactive HTML dashboard, JSON, and SARIF (2.1.0)."""
+"""Output generators: interactive HTML dashboard, JSON, SARIF (2.1.0), Markdown."""
 import html
 import json
 import datetime
@@ -20,32 +20,26 @@ def to_sarif(findings, target) -> str:
                 "fullDescription": {"text": f.message},
                 "helpUri": f"https://cwe.mitre.org/data/definitions/{f.cwe.split('-')[-1]}.html",
                 "defaultConfiguration": {"level": _severity_to_sarif(f.severity)},
-                "properties": {
-                    "tags": ["security", "sast", f.cwe, f.owasp],
-                    "precision": "high" if f.confidence == "HIGH" else "medium",
-                },
+                "properties": {"tags": ["security", "sast", f.cwe, f.owasp],
+                               "precision": "high" if f.confidence == "HIGH" else "medium"},
             })
         results.append({
             "ruleId": rid.replace(" ", ""),
             "ruleIndex": seen_rules[rid] - 1,
             "level": _severity_to_sarif(f.severity),
             "message": {"text": f.message},
-            "locations": [{
-                "physicalLocation": {
-                    "artifactLocation": {"uri": _rel_path(f.file)},
-                    "region": {"startLine": f.line, "startColumn": max(f.column, 1)},
-                }
-            }],
-            "properties": {
-                "cwe": f.cwe, "confidence": f.confidence,
-                "owasp": f.owasp, "attackTechnique": f.attack_technique,
-            },
+            "locations": [{"physicalLocation": {
+                "artifactLocation": {"uri": _rel_path(f.file)},
+                "region": {"startLine": f.line, "startColumn": max(f.column, 1)},
+            }}],
+            "properties": {"cwe": f.cwe, "confidence": f.confidence,
+                           "owasp": f.owasp, "attackTechnique": f.attack_technique},
         })
     sarif = {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
         "runs": [{
-            "tool": {"driver": {"name": "SAST-VULN-SCANNER", "version": "2.1.0",
+            "tool": {"driver": {"name": "SAST-VULN-SCANNER", "version": "3.0.0",
                                  "rules": rules,
                                  "informationUri": "https://github.com/walimuhamad185/SAST-VULN-SCANNER"}},
             "results": results,
@@ -55,7 +49,6 @@ def to_sarif(findings, target) -> str:
 
 
 def _rel_path(p: str) -> str:
-    # SARIF prefers repo-relative paths; fall back to absolute.
     import os
     return os.path.basename(p)
 
@@ -88,14 +81,11 @@ def to_html(findings, target, raw_total, verified_total) -> str:
               <div class="conf">Confidence: {html.escape(f.confidence)}</div>
               <div class="attack">MITRE ATT&amp;CK: {attack}</div></td>
         </tr>""")
-
     body_rows = "\n".join(rows) if rows else (
         '<tr><td colspan="3" style="text-align:center;padding:40px;color:#16a34a">'
         '✅ No verified security threats found! Code meets strict compliance standards.</td></tr>'
     )
     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-    # Severity breakdown for summary cards
     sev_counts = {}
     for f in findings:
         sev_counts[f.severity] = sev_counts.get(f.severity, 0) + 1
@@ -141,8 +131,7 @@ def to_html(findings, target, raw_total, verified_total) -> str:
     <div class="card crit">Critical<br><span style="font-size:28px">{sev_counts.get('CRITICAL', 0)}</span></div>
     <div class="card high">High<br><span style="font-size:28px">{sev_counts.get('HIGH', 0)}</span></div>
     <div class="card med">Medium<br><span style="font-size:28px">{sev_counts.get('MEDIUM', 0)}</span></div>
-    <div class="card raw"><strong>Target:</strong> {html.escape(target)}<br>
-      <strong>Scan Date:</strong> {now}</div>
+    <div class="card raw"><strong>Target:</strong> {html.escape(target)}<br><strong>Scan Date:</strong> {now}</div>
   </div>
   <table>
     <thead><tr>
@@ -161,7 +150,7 @@ def to_html(findings, target, raw_total, verified_total) -> str:
 def to_json(findings, target) -> str:
     out = {
         "tool": "SAST-VULN-SCANNER",
-        "version": "2.1.0",
+        "version": "3.0.0",
         "target": target,
         "scan_date": datetime.datetime.now().isoformat(),
         "finding_count": len(findings),
@@ -176,3 +165,40 @@ def _severity_summary(findings) -> dict:
     for f in findings:
         s[f.severity] = s.get(f.severity, 0) + 1
     return s
+
+
+def to_markdown(findings, target) -> str:
+    """Render a clean Markdown report (GitHub/CI friendly)."""
+    import datetime
+    lines = ["# 🛡️ SAST Security Report", "",
+             f"- **Target:** `{target}`",
+             f"- **Scan date:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+             f"- **Findings:** {len(findings)}", ""]
+    if not findings:
+        lines.append("✅ No verified security threats found.")
+        return "\n".join(lines)
+    summary = _severity_summary(findings)
+    lines.append("## Severity Summary")
+    lines.append("| Severity | Count |")
+    lines.append("|:--|--:|")
+    for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
+        lines.append(f"| {sev} | {summary.get(sev, 0)} |")
+    lines.append("")
+    lines.append("## Findings")
+    for f in sorted(findings, key=lambda x: SEVERITY_ORDER.get(x.severity, 9)):
+        lines.append(f"### {f.severity} — {f.rule} ({f.cwe})")
+        owasp = f.owasp or "—"
+        attack = f.attack_technique or "—"
+        lines.append(f"- **Location:** `{f.file}:{f.line}` (col {f.column}) · language `{f.language}`")
+        lines.append(f"- **OWASP:** {owasp} · **MITRE ATT&CK:** {attack} · **Confidence:** {f.confidence}")
+        if f.dataflow:
+            lines.append("- **Dataflow:**")
+            for d in f.dataflow:
+                lines.append(f"  - `{d}`")
+        lines.append("")
+        lines.append("```" + f.language)
+        lines.append(f.code)
+        lines.append("```")
+        lines.append(f"- **Remediation:** {f.message}")
+        lines.append("")
+    return "\n".join(lines)
