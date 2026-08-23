@@ -1,8 +1,4 @@
-"""
-sast_agent/rules.py
-===================
-Vulnerability rules: sinks, secure-alternatives, and AST analysis logic.
-"""
+"""Vulnerability rules: sinks, secure-alternatives, and AST analysis logic."""
 from .models import Rule
 
 RULES = [
@@ -32,10 +28,10 @@ RULES = [
          languages=["python", "javascript", "php", "ruby", "java", "go", "c"]),
     Rule(name="Hardcoded Credential", cwe="CWE-798", severity="HIGH",
          description="Hardcoded password, API key, or secret token in source.",
-         remediation="Move secrets to environment variables or a secrets manager.",
+         remediation="Move secrets to environment variables or a secrets manager (e.g. vault).",
          languages=["python", "javascript", "typescript", "php", "ruby", "java", "go", "csharp"]),
     Rule(name="Insecure Deserialization", cwe="CWE-502", severity="CRITICAL",
-         description="Deserializing untrusted data (pickle, unserialize, Marshal).",
+         description="Deserializing untrusted data (pickle, unserialize, Marshal, yaml.load).",
          remediation="Never deserialize untrusted input; use safe data formats (JSON) with schema validation.",
          languages=["python", "javascript", "php", "ruby", "java", "go", "csharp"]),
     Rule(name="Insecure Randomness", cwe="CWE-330", severity="MEDIUM",
@@ -44,8 +40,36 @@ RULES = [
          languages=["python", "javascript", "typescript", "php", "ruby", "java", "go", "csharp"]),
     Rule(name="Server-Side Request Forgery", cwe="CWE-918", severity="HIGH",
          description="User-controlled URL passed to a server-side HTTP fetch.",
-         remediation="Allow-list and validate destination URLs; block internal IPs.",
+         remediation="Allow-list and validate destination URLs; block internal/link-local IPs.",
          languages=["python", "javascript", "typescript", "php", "ruby", "go", "java"]),
+    Rule(name="XML External Entity (XXE)", cwe="CWE-611", severity="HIGH",
+         description="XML parser configured to allow external entities (XXE).",
+         remediation="Disable external entity resolution; use a hardened parser (defusedxml).",
+         languages=["python", "java", "php", "csharp"]),
+    Rule(name="Server-Side Template Injection", cwe="CWE-1336", severity="CRITICAL",
+         description="User input concatenated into a server-side template.",
+         remediation="Use sandboxed template engines and never template raw user input as a template string.",
+         languages=["python", "javascript", "ruby", "go"]),
+    Rule(name="LDAP Injection", cwe="CWE-90", severity="HIGH",
+         description="Unsanitized input flows into an LDAP query/filter.",
+         remediation="Escape LDAP special characters and use parameterized LDAP APIs.",
+         languages=["python", "java", "php", "csharp"]),
+    Rule(name="Open Redirect", cwe="CWE-601", severity="MEDIUM",
+         description="User-controlled URL used as a redirect target without validation.",
+         remediation="Use an allow-list of safe redirect targets; reject absolute external URLs.",
+         languages=["python", "javascript", "typescript", "php", "ruby", "java", "go"]),
+    Rule(name="Insecure JWT", cwe="CWE-347", severity="HIGH",
+         description="JWT signed with 'none' algorithm / weak secret / disabled validation.",
+         remediation="Enforce strong algorithms (RS256/ES256) and verify signatures server-side.",
+         languages=["python", "javascript", "typescript", "go", "java"]),
+    Rule(name="Log Injection", cwe="CWE-117", severity="MEDIUM",
+         description="Unsanitized user input written to logs (CRLF/format injection).",
+         remediation="Sanitize log input (strip newlines) and use structured logging.",
+         languages=["python", "javascript", "java", "go", "php", "ruby"]),
+    Rule(name="Insecure YAML Deserialization", cwe="CWE-502", severity="CRITICAL",
+         description="Unsafe yaml.load() with untrusted input enabling arbitrary object instantiation.",
+         remediation="Use yaml.safe_load() for untrusted YAML input.",
+         languages=["python"]),
 ]
 
 SINKS = {
@@ -59,6 +83,12 @@ SINKS = {
         r"\bsecrets\.|random\.randint|random\.random\s*\(\)",
         r"cryptography[^\n]*(DES|RC4|Blowfish)",
         r"requests\.(get|post)\s*\([^)]*(request|input|url|args)",
+        r"etree\.parse\s*\(|fromstring\s*\(|lxml\.etree|xml\.etree|minidom\.parse|sax\.parse",
+        r"jinja2\.Template\s*\(|Template\s*\([^)]*(request|input|user)|render_template_string\s*\(|\.from_string\s*\(",
+        r"ldap\.|ldap3\.|search_s\s*\(|\bLDAPSearch\b",
+        r"redirect\s*\([^)]*(request|input|url|next|args)|HttpResponseRedirect\s*\([^)]*(request|input)",
+        r"jwt\.encode\s*\(|\"alg\"\s*:\s*[\"']none|verify_signature\s*=\s*False|decode\s*\([^)]*algorithms|options\s*=\s*\{[^}]*[\"']verify",
+        r"logging\.\w+\s*\([^)]*(request|input|user|args|%|format)|logger\.\w+\s*\([^)]*(request|input)",
     ],
     "javascript": [
         r"\beval\s*\(", r"\bFunction\s*\(", r"\bexec\s*\(\s*['\"]", r"\bexecSync\s*\(", r"\bspawn\s*\(",
@@ -69,12 +99,18 @@ SINKS = {
         r"require\s*\(\s*[\"'][a-z]*path[\"']\).*\+|readFile\s*\([^)]*req|sendFile\s*\([^)]*req",
         r"password\s*[:=]\s*['\"][^'\"]{4,}['\"]|api[_-]?key\s*[:=]\s*['\"]|secret\s*[:=]\s*['\"]|token\s*[:=]\s*['\"][A-Za-z0-9]{8,}",
         r"axios\.(get|post)\s*\([^)]*(req|url|input|location)|fetch\s*\([^)]*(req|url|input|location)",
+        r"res\.redirect\s*\([^)]*(req|query|input|url)|location\.href\s*=|window\.location\s*=[^;]*(req|query|input)",
+        r"jwt\.sign\s*\(|algorithm\s*:\s*['\"]none|jsonwebtoken[^\n]*none",
+        r"console\.(log|error|warn)\s*\([^)]*(req\.|query\.|body\.|params)",
+        r"ejs\.render\s*\(|\.render\s*\([^)]*(req|query|input)[^)]*\}|\{\{[\s\S]*\}\}[\s\S]*(req|query)",
     ],
     "typescript": [
         r"\beval\s*\(", r"\bexecSync\s*\(", r"\bspawn\s*\(", r"\.query\s*\(\s*['\"][\s\S]*\+",
         r"document\.write\s*\(|\.innerHTML\s*=|dangerouslySetInnerHTML",
         r"crypto\.createHash\s*\(\s*['\"]md5|crypto\.createHash\s*\(\s*['\"]sha1",
         r"password\s*[:=]\s*['\"]|api[_-]?key\s*[:=]\s*['\"]|secret\s*[:=]\s*['\"]",
+        r"res\.redirect\s*\([^)]*(req|query|input)|jwt\.sign\s*\(|algorithm\s*:\s*['\"]none",
+        r"console\.(log|error)\s*\([^)]*(req\.|query\.|body\.)",
     ],
     "php": [
         r"\bsystem\s*\(|\bexec\s*\(|\bshell_exec\s*\(|\bpassthru\s*\(|\beval\s*\(|\bpopen\s*\(",
@@ -84,6 +120,10 @@ SINKS = {
         r"unserialize\s*\(|\binclude\s+\$_|\brequire\s+\$_|fopen\s*\([^)]*\$",
         r"\b\$password\s*=\s*['\"]|\$api_key\s*=\s*['\"]|\$secret\s*=\s*['\"]",
         r"file_get_contents\s*\([^)]*\$_(GET|POST|REQUEST)",
+        r"simplexml_load_string\s*\(|new\s+DOMDocument\s*\(|loadXML\s*\(|xml_parse\s*\(",
+        r"ldap_search\s*\(|ldap_list\s*\(",
+        r"header\s*\(\s*['\"]Location:[^)]*\$|header\s*\(\s*['\"]Location:[^'\"]*\$_",
+        r"\$\_GET|\$\_POST[^\n]*\n?[^\n]*(log|syslog|error_log)",
     ],
     "ruby": [
         r"\bsystem\s*\(|\bexec\s*\(|\b`[^`]*#\{|\beval\s*\(", r"\bMarshal\.load\s*\(",
@@ -92,6 +132,10 @@ SINKS = {
         r"params\[[^\]]*\]\s*\.|render\s*(?:inline|text)\s*=>.*params",
         r"password\s*[:=]\s*['\"]|api_key\s*[:=]\s*['\"]",
         r"net/http[^\n]*uri|Net::HTTP\.get\s*\([^)]*params",
+        r"ERB\.new\s*\(|\.result\s*\([^)]*params|render\s*\(\s*params",
+        r"redirect_to\s*[^)]*params|redirect_to\s*[^)]*request",
+        r"JWT\.encode\s*\(|jwt[^\n]*none",
+        r"logger\.\w+\s*\([^)]*params|Rails\.logger[^\n]*params",
     ],
     "java": [
         r"Runtime\.getRuntime\(\)\.exec\s*\(|ProcessBuilder\s*\(",
@@ -101,6 +145,11 @@ SINKS = {
         r"new\s+File\s*\([^)]*getParameter|getParameter\([^)]*\)\s*\.",
         r"password\s*=\s*['\"]|API_KEY\s*=\s*['\"]|secret\s*=\s*['\"]",
         r"HttpURLConnection[^\n]*(getParameter|getHeader|input)",
+        r"DocumentBuilderFactory\s*\(|new\s+SAXParser|XMLReaderFactory|InputSource\s*\(",
+        r"DirContext\s*\.\s*search\s*\(|InitialDirContext|ldap",
+        r"sendRedirect\s*\([^)]*getParameter|sendRedirect\s*\([^)]*request",
+        r"Io\.jsonwebtoken[^\n]*none|\.signWith[^\n]*Keys\.hmacShaKeyFor\([^)]*getBytes",
+        r"log\.\w+\s*\([^)]*getParameter|logger\.\w+\s*\([^)]*request",
     ],
     "go": [
         r"exec\.Command\s*\([^)]*\.\.\.|os/exec[^\n]*Command",
@@ -109,6 +158,11 @@ SINKS = {
         r"gob\.NewDecoder\s*\(|json\.Unmarshal\s*\([^)]*\)\s*//.*untrusted",
         r"password\s*[:=]\s*['\"]|apiKey\s*[:=]\s*['\"]|secret\s*[:=]\s*['\"]",
         r"http\.Get\s*\([^)]*\.(Query|FormValue|Param)",
+        r"xml\.NewDecoder\s*\(|xml\.Unmarshal\s*\(",
+        r"ldap\.Dial\s*\(|ldap\.NewSearchRequest\s*\(|\.Search\s*\([^)]*\)\s*//.*filter",
+        r"http\.Redirect\s*\([^)]*\.(Query|FormValue|Param)",
+        r"jwt\.New[^n]*\(\s*jwt\.SigningMethodHS256|jwt[^\n]*none|SigningMethodNone",
+        r"log\.\w+\s*\([^)]*\.(Query|FormValue|Param)",
     ],
     "c": [
         r"\bsystem\s*\(|\bpopen\s*\(|\bexeclp?\s*\(|\bexecvp?\s*\(|\bsystem\s*\(",
@@ -126,6 +180,10 @@ SINKS = {
         r"BinaryFormatter[^\n]*Deserialize|\.Deserialize\s*\([^)]*Request",
         r"Response\.Write\s*\([^)]*Request|innerHTML\s*=.*Request",
         r"password\s*=\s*['\"]|API_KEY\s*=\s*['\"]|secret\s*=\s*['\"]",
+        r"XmlDocument\(\s*\)|XmlReaderSettings|XDocument\.Parse\s*\(",
+        r"DirectorySearcher\s*\(|SearchRequest\s*\(",
+        r"Redirect\s*\([^)]*Request|RedirectPermanent\s*\([^)]*Request",
+        r"JwtSecurityTokenHandler[^\n]*None|\.WriteToken\s*\([^)]*None",
     ],
     "shell": [
         r"\beval\s+['\"]?\$", r"\bcurl\b[^\n]*\$(cat|printf)", r"password=\S+|PASSWD=\S+",
@@ -137,12 +195,14 @@ SANITIZERS = {
         r"subprocess\.run\s*\(\s*\[", r"\.execute\(\s*['\"][\s\S]*?\?\s*[,)]",
         r"\.execute\(\s*['\"][\s\S]*?%s", r"hashlib\.(sha256|sha512|sha3_256|sha3_512)",
         r"bcrypt\.|argon2|pbkdf2", r"secrets\.(token_|randbelow|choice)", r"subprocess\.\w+\s*\([^)]*shell\s*=\s*False",
+        r"yaml\.safe_load\s*\(|defusedxml|defused\.", r"safe_render|autoescape",
     ],
     "javascript": [
         r"createHash\s*\(\s*['\"]sha256|createHash\s*\(\s*['\"]sha512",
         r"crypto\.randomBytes|getRandomValues",
         r"escaped\(|htmlspecialchars|\bencodeURIComponent\s*\(",
         r"\.query\s*\(\s*['\"][\s\S]*\?\s*[,)]|\.query\s*\(\s*['\"][\s\S]*\$1[\s\S]*,\s*\[",
+        r"escape\(|sanitizeHtml|DOMPurify",
     ],
     "php": [
         r"password_hash\s*\(|password_verify\s*\(|hash\s*\(\s*['\"]sha256",
@@ -165,4 +225,24 @@ SANITIZERS = {
         r"SHA256\.Create\s*\(|SHA512\.Create\s*\(|RNGCryptoServiceProvider|RandomNumberGenerator\b",
         r"Parameters\.AddWithValue|SqlParameter\b",
     ],
+}
+
+REMEDIATION_SNIPPETS = {
+    "OS Command Injection": "Use subprocess.run([...]) with an argument list and shell=False.",
+    "Code Injection (eval/exec)": "Replace eval()/exec() with a safe parser/whitelist lookup.",
+    "SQL Injection": "Use parameterized queries: cursor.execute('... WHERE x = ?', (user_input,)).",
+    "Insecure Cryptography": "Replace with hashlib.sha256() / bcrypt / Argon2; AES-GCM for encryption.",
+    "Cross-Site Scripting (XSS)": "HTML-encode output (escape()/DOMPurify/htmlspecialchars).",
+    "Path Traversal": "Resolve and validate against an allow-list root (os.path.realpath + startswith check).",
+    "Hardcoded Credential": "Load from env: os.getenv('SECRET') / process.env.SECRET / a secrets manager.",
+    "Insecure Deserialization": "Use yaml.safe_load() / JSON with schema validation; never pickle untrusted data.",
+    "Insecure Randomness": "Use secrets.token_hex() / crypto.getRandomValues() / SecureRandom.",
+    "Server-Side Request Forgery": "Allow-list destination hosts; block internal/link-local IPs before fetch.",
+    "XML External Entity (XXE)": "Disable external entities / DTD; use defusedxml (Python).",
+    "Server-Side Template Injection": "Use sandboxed template engine and pass user input as data, not template.",
+    "LDAP Injection": "Escape LDAP special chars and use parameterized LDAP search APIs.",
+    "Open Redirect": "Use an allow-list of safe relative redirect targets.",
+    "Insecure JWT": "Enforce RS256/ES256 and always verify signature server-side.",
+    "Log Injection": "Strip newlines from log input; use structured logging.",
+    "Insecure YAML Deserialization": "Use yaml.safe_load() for untrusted YAML.",
 }
