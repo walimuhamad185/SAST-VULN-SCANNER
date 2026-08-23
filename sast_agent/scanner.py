@@ -120,12 +120,15 @@ class SASTScanner:
                               "Insecure Randomness", "CWE-330", "MEDIUM",
                               lines[node.lineno - 1], "python",
                               "Non-cryptographic RNG — use the 'secrets' module for security.", _CONF_MED)
-                elif name in ("requests.get", "requests.post", "httpx.get", "httpx.post"):
-                    if _call_has_taint(node, tainted_vars):
-                        self._add(path, node.lineno, node.col_offset,
-                                  "Server-Side Request Forgery", "CWE-918", "HIGH",
-                                  lines[node.lineno - 1], "python",
-                                  "User-controlled URL passed to server-side HTTP client.", _CONF_MED)
+                elif name in ("requests.get", "requests.post", "requests.request",
+                              "httpx.get", "httpx.post", "urllib.request.urlopen"):
+                    is_t = _call_has_taint(node, tainted_vars)
+                    self._add(path, node.lineno, node.col_offset,
+                              "Server-Side Request Forgery", "CWE-918", "HIGH",
+                              lines[node.lineno - 1], "python",
+                              "Server-side HTTP request to a potentially user-controlled URL (SSRF).",
+                              _CONF_HIGH if is_t else _CONF_MED,
+                              tainted=is_t, source_lines=source_lines)
                 elif name == "open" and self._file_open_tainted(node, tainted_vars):
                     self._add(path, node.lineno, node.col_offset,
                               "Path Traversal", "CWE-22", "HIGH",
@@ -145,12 +148,14 @@ class SASTScanner:
                               "XML External Entity (XXE)", "CWE-611", "HIGH",
                               lines[node.lineno - 1], "python",
                               "XML parsed without disabling external entities (XXE).", _CONF_MED)
-                if name in ("render_template_string",) or "jinja2" in name or name.endswith("from_string"):
-                    if _call_has_taint(node, tainted_vars):
-                        self._add(path, node.lineno, node.col_offset,
-                                  "Server-Side Template Injection", "CWE-1336", "CRITICAL",
-                                  lines[node.lineno - 1], "python",
-                                  "User input rendered as a template (SSTI).", _CONF_MED)
+                if name in ("render_template_string", "render_template") or "jinja2" in name or name.endswith(("from_string", "from_string_")):
+                    is_t = _call_has_taint(node, tainted_vars)
+                    self._add(path, node.lineno, node.col_offset,
+                              "Server-Side Template Injection", "CWE-1336", "CRITICAL",
+                              lines[node.lineno - 1], "python",
+                              "Server-side template rendered from input (SSTI) — use sandboxed engine / pass data, not template.",
+                              _CONF_HIGH if is_t else _CONF_MED,
+                              tainted=is_t, source_lines=source_lines)
                 if "ldap" in name or name.endswith(("search_s", "search_ext")):
                     self._add(path, node.lineno, node.col_offset,
                               "LDAP Injection", "CWE-90", "HIGH",
@@ -169,11 +174,15 @@ class SASTScanner:
 
             if isinstance(node, ast.Call):
                 name = _call_name(node)
-                if name in ("redirect", "HttpResponseRedirect", "HttpResponsePermanentRedirect") and _call_has_taint(node, tainted_vars):
-                    self._add(path, node.lineno, node.col_offset,
-                              "Open Redirect", "CWE-601", "MEDIUM",
-                              lines[node.lineno - 1], "python",
-                              "User-controlled redirect target without validation.", _CONF_MED)
+                if name in ("redirect", "url_for", "HttpResponseRedirect", "HttpResponsePermanentRedirect"):
+                    is_t = _call_has_taint(node, tainted_vars)
+                    if name != "url_for" or is_t:
+                        self._add(path, node.lineno, node.col_offset,
+                                  "Open Redirect", "CWE-601", "MEDIUM",
+                                  lines[node.lineno - 1], "python",
+                                  "Redirect target derived from user input without validation.",
+                                  _CONF_MED if is_t else _CONF_LOW,
+                                  tainted=is_t, source_lines=source_lines)
 
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
                 targets = node.targets if isinstance(node, ast.Assign) else [node.target]
@@ -318,11 +327,33 @@ def _call_name(node):
 
 
 def _call_has_taint(node, tainted_vars):
+    tainted = set(tainted_vars or [])
     for arg in node.args:
-        if isinstance(arg, ast.Name) and arg.id in tainted_vars:
+        if _expr_is_tainted(arg, tainted):
             return True
-        if isinstance(arg, (ast.BinOp, ast.JoinedStr, ast.FormattedValue)):
+    for kw in node.keywords:
+        if _expr_is_tainted(kw.value, tainted):
             return True
+    return False
+
+
+def _expr_is_tainted(expr, tainted):
+    if isinstance(expr, ast.Name):
+        return expr.id in tainted
+    if isinstance(expr, (ast.BinOp, ast.JoinedStr, ast.FormattedValue)):
+        return True
+    if isinstance(expr, ast.Call):
+        return True
+    if isinstance(expr, ast.Attribute):
+        return True
+    if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
+        return any(_expr_is_tainted(e, tainted) for e in expr.elts)
+    if isinstance(expr, ast.Dict):
+        for k, v in zip(expr.keys, expr.values):
+            if _expr_is_tainted(k, tainted) or _expr_is_tainted(v, tainted):
+                return True
+    if isinstance(expr, ast.IfExp):
+        return _expr_is_tainted(expr.body, tainted) or _expr_is_tainted(expr.orelse, tainted)
     return False
 
 
