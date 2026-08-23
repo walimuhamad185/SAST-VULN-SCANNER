@@ -1,0 +1,8 @@
+# SAST-VULN-SCANNER example configuration
+target: ./tests
+format: all
+threshold: HIGH
+no_ai: false
+exclude:
+  - "*_test.py"
+  - "test_*.py"

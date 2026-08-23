@@ -1,10 +1,10 @@
-__pycache__/
+# Report outputs
+sast_security_report.*
+sast_autofix_report.*
+sast_baseline.json
 *.pyc
-*.pyo
+__pycache__/
+*.egg-info/
+dist/
+build/
 .env
-.venv/
-venv/
-sast_security_report.html
-sast_security_report.json
-sast_security_report.sarif
-.DS_Store

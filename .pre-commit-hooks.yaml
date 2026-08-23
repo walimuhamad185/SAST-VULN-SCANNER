@@ -1,0 +1,7 @@
+- id: sast-agent
+  name: SAST-VULN-SCANNER
+  description: AI-powered universal static application security testing.
+  entry: sast-agent scan --quiet --no-ai --threshold HIGH
+  language: python
+  types: [python, javascript, typescript, php, ruby, java, go, c, c++]
+  pass_filenames: false

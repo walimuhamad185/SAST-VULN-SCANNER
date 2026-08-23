@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sast-vuln-scanner"
+version = "3.0.0"
+description = "Next-Gen AI-Powered Universal SAST Agent"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "Wali Muhammad" }]
+
+[project.optional-dependencies]
+ai = ["openai>=1.0.0"]
+pdf = ["weasyprint"]
+yaml = ["pyyaml"]
+all = ["openai>=1.0.0", "weasyprint", "pyyaml"]
+
+[project.scripts]
+sast-agent = "sast_agent.cli:main"
+sast = "sast_agent.cli:main"
