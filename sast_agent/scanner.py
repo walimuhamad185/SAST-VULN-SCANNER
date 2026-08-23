@@ -104,7 +104,7 @@ class SASTScanner:
                               "OS Command Injection", "CWE-78", "CRITICAL",
                               lines[node.lineno - 1], "python",
                               f"Shell command execution via {name}() — ensure no user input.", _CONF_HIGH)
-                elif name in ("pickle.load", "pickle.loads", "yaml.load"):
+                elif name in ("pickle.load", "pickle.loads"):
                     self._add(path, node.lineno, node.col_offset,
                               "Insecure Deserialization", "CWE-502", "CRITICAL",
                               lines[node.lineno - 1], "python",
@@ -131,6 +131,49 @@ class SASTScanner:
                               "Path Traversal", "CWE-22", "HIGH",
                               lines[node.lineno - 1], "python",
                               "File opened with a tainted (user-controlled) path.", _CONF_MED)
+
+            if isinstance(node, ast.Call):
+                name = _call_name(node)
+                if name in ("yaml.load",):
+                    self._add(path, node.lineno, node.col_offset,
+                              "Insecure YAML Deserialization", "CWE-502", "CRITICAL",
+                              lines[node.lineno - 1], "python",
+                              "Unsafe yaml.load() with untrusted input — use yaml.safe_load().", _CONF_HIGH)
+                if any(k in name for k in ("etree.parse", "etree.fromstring", "minidom.parse",
+                                           "lxml.etree.parse", "lxml.etree.fromstring", "sax.parse")):
+                    self._add(path, node.lineno, node.col_offset,
+                              "XML External Entity (XXE)", "CWE-611", "HIGH",
+                              lines[node.lineno - 1], "python",
+                              "XML parsed without disabling external entities (XXE).", _CONF_MED)
+                if name in ("render_template_string",) or "jinja2" in name or name.endswith("from_string"):
+                    if _call_has_taint(node, tainted_vars):
+                        self._add(path, node.lineno, node.col_offset,
+                                  "Server-Side Template Injection", "CWE-1336", "CRITICAL",
+                                  lines[node.lineno - 1], "python",
+                                  "User input rendered as a template (SSTI).", _CONF_MED)
+                if "ldap" in name or name.endswith(("search_s", "search_ext")):
+                    self._add(path, node.lineno, node.col_offset,
+                              "LDAP Injection", "CWE-90", "HIGH",
+                              lines[node.lineno - 1], "python",
+                              "Unsanitized input flows into an LDAP query.", _CONF_MED)
+                if name in ("jwt.encode", "jwt.decode"):
+                    self._add(path, node.lineno, node.col_offset,
+                              "Insecure JWT", "CWE-347", "HIGH",
+                              lines[node.lineno - 1], "python",
+                              "JWT handling may use weak algorithm / disabled verification.", _CONF_MED)
+                if name.startswith(("logging.", "logger.")) and _call_has_taint(node, tainted_vars):
+                    self._add(path, node.lineno, node.col_offset,
+                              "Log Injection", "CWE-117", "MEDIUM",
+                              lines[node.lineno - 1], "python",
+                              "Unsanitized user input written to logs.", _CONF_LOW)
+
+            if isinstance(node, ast.Call):
+                name = _call_name(node)
+                if name in ("redirect", "HttpResponseRedirect", "HttpResponsePermanentRedirect") and _call_has_taint(node, tainted_vars):
+                    self._add(path, node.lineno, node.col_offset,
+                              "Open Redirect", "CWE-601", "MEDIUM",
+                              lines[node.lineno - 1], "python",
+                              "User-controlled redirect target without validation.", _CONF_MED)
 
             if isinstance(node, (ast.Assign, ast.AnnAssign)):
                 targets = node.targets if isinstance(node, ast.Assign) else [node.target]
@@ -172,16 +215,23 @@ class SASTScanner:
                 rule = self._attribute_rule(pat, lang)
                 cwe = _cwe_for_rule(rule)
                 sev = _severity_for_rule(rule)
-                conf = _CONF_HIGH if (tainted_vars or source_lines) else _CONF_MED
+                is_tainted = bool(tainted_vars or source_lines)
+                conf = _CONF_HIGH if is_tainted else _CONF_MED
                 self._add(path, i, m.start(), rule, cwe, sev, line, lang,
-                          _message_for(rule), conf)
+                          _message_for(rule), conf,
+                          tainted=is_tainted, source_lines=source_lines)
                 break
 
-    def _add(self, path, line, col, rule, cwe, severity, code, lang, msg, conf):
+    def _add(self, path, line, col, rule, cwe, severity, code, lang, msg, conf,
+             tainted=False, source_lines=None):
+        dataflow = []
+        if tainted and source_lines:
+            for sl in sorted(source_lines):
+                dataflow.append(f"{path}:{sl} -> {path}:{line} (sink)")
         self.findings.append(Finding(
             rule=rule, cwe=cwe, severity=severity, file=path, line=line,
             column=col + 1, code=code.strip()[:300], language=lang,
-            message=msg, confidence=conf,
+            message=msg, confidence=conf, dataflow=dataflow,
         ))
 
     def _file_open_tainted(self, node, tainted_vars):
@@ -227,6 +277,30 @@ class SASTScanner:
         if any(k in p for k in ("requests.", "http.get", "fetch(", "axios", "net/http",
                                 "httpurlconnection", "curl")):
             return "Server-Side Request Forgery"
+        if any(k in p for k in ("etree.parse", "fromstring", "minidom", "sax", "xml.",
+                                "xmldocument", "xmlreader", "domdocument", "loadxml",
+                                "simplexml", "documentbuilder", "saxparser", "xmldecoder",
+                                "xml.unmarshal", "inputsource", "xdocument.parse")):
+            return "XML External Entity (XXE)"
+        if any(k in p for k in ("jinja2", "render_template_string", "from_string",
+                                "ejs.render", "template(", "erb.new", ".result(",
+                                ".render(", "template.inject")):
+            return "Server-Side Template Injection"
+        if any(k in p for k in ("ldap.", "ldap3", "ldapsearch", "search_s",
+                                "dircontext", "initialdircontext", "directorysearcher",
+                                "searchrequest", "ldap.dial", "ldap_search")):
+            return "LDAP Injection"
+        if any(k in p for k in ("redirect", "sendredirect", "http.redirect",
+                                "location.href", "window.location", "redirectto",
+                                "redirectpermanent")):
+            return "Open Redirect"
+        if any(k in p for k in ("jwt.", "signingmethod", "jsonwebtoken", "jwtsecuritytoken",
+                                "alg", "signwith", "jwt.encode", "jwt.sign")):
+            return "Insecure JWT"
+        if any(k in p for k in ("logging.", "logger.", "log.info", "log.error", "log.warn",
+                                "syslog", "error_log", "rails.logger", "console.log",
+                                "console.error", "log.println")):
+            return "Log Injection"
         return "OS Command Injection"
 
 
