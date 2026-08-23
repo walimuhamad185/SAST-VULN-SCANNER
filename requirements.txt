@@ -1,0 +1,7 @@
+# Core engine: zero mandatory dependencies (Python 3.8+ stdlib only)
+
+# Optional: local AI re-verification layer (Ollama via OpenAI-compatible API)
+openai>=1.0.0
+
+# Optional: richer syntax parsing if you extend AST support
+# tree-sitter>=0.21.0

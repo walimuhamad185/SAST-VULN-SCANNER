@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+venv/
+sast_security_report.html
+sast_security_report.json
+sast_security_report.sarif
+.DS_Store
