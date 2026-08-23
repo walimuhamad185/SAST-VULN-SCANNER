@@ -14,6 +14,13 @@ MITRE_MAP = {
     "Use of eval with user input": "CWE-95",
     "Server-Side Request Forgery": "CWE-918",
     "Insecure Randomness": "CWE-330",
+    "XML External Entity (XXE)": "CWE-611",
+    "Server-Side Template Injection": "CWE-1336",
+    "LDAP Injection": "CWE-90",
+    "Open Redirect": "CWE-601",
+    "Insecure JWT": "CWE-347",
+    "Log Injection": "CWE-117",
+    "Insecure YAML Deserialization": "CWE-502",
 }
 
 OWASP_2021_MAP = {
@@ -27,6 +34,13 @@ OWASP_2021_MAP = {
     "Hardcoded Credential": "A07:2021 Identification and Authentication Failures",
     "Server-Side Request Forgery": "A10:2021 SSRF",
     "Insecure Randomness": "A02:2021 Cryptographic Failures",
+    "XML External Entity (XXE)": "A05:2021 Security Misconfiguration",
+    "Server-Side Template Injection": "A03:2021 Injection",
+    "LDAP Injection": "A03:2021 Injection",
+    "Open Redirect": "A01:2021 Broken Access Control",
+    "Insecure JWT": "A07:2021 Identification and Authentication Failures",
+    "Log Injection": "A09:2021 Security Logging and Monitoring Failures",
+    "Insecure YAML Deserialization": "A08:2021 Software and Data Integrity Failures",
 }
 
 ATTACK_MAP = {
@@ -40,6 +54,13 @@ ATTACK_MAP = {
     "Path Traversal": "T1005 — Data from Local System",
     "Insecure Cryptography": "T1600 — Weaken Encryption",
     "Insecure Randomness": "T1600 — Weaken Encryption",
+    "XML External Entity (XXE)": "T1190 — Exploit Public-Facing Application",
+    "Server-Side Template Injection": "T1190 — Exploit Public-Facing Application",
+    "LDAP Injection": "T1190 — Exploit Public-Facing Application",
+    "Open Redirect": "T1189 — Drive-by Compromise",
+    "Insecure JWT": "T1078 — Valid Accounts",
+    "Log Injection": "T1562 — Impair Defenses",
+    "Insecure YAML Deserialization": "T1190 — Exploit Public-Facing Application",
 }
 
 
@@ -72,6 +93,7 @@ class Finding:
         d["cwe_url"] = f"https://cwe.mitre.org/data/definitions/{self.cwe.split('-')[-1]}.html"
         d["owasp"] = self.owasp
         d["attack_technique"] = self.attack_technique
+        d["remediation"] = self.message
         return d
 
 
