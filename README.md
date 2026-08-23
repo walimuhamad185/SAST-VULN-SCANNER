@@ -1,108 +1,142 @@
-# SAST-VULN-SCANNER 🛡️
+# Next-Gen AI-Powered Universal SAST Agent 🛡️
 
-[![Static Application Security Testing](https://shields.io)](https://github.com/walimuhamad185/SAST-VULN-SCANNER)
-[![Environment](https://shields.io)](https://kali.org)
-[![Language](https://shields.io)](https://python.org)
+[![Static Application Security Testing](https://img.shields.io/badge/SAST-AI%20Powered-red)](https://github.com/walimuhamad185/SAST-VULN-SCANNER)
+[![Languages](https://img.shields.io/badge/languages-11+-blue)](https://github.com/walimuhamad185/SAST-VULN-SCANNER)
+[![License](https://img.shields.io/badge/license-MIT-green)](https://github.com/walimuhamad185/SAST-VULN-SCANNER)
 
-An advanced, enterprise-grade Automated Static Application Security Testing (SAST) Engine architected specifically for deep-dive source code infrastructure auditing within Kali Linux ecosystems. This engine utilizes deterministic abstract pattern compilation and recursive semantic checking to hunt down critical zero-day vectors, systemic logical injection flaws, and high-risk insecure coding frameworks before compiler execution.
+An advanced, open-source static application security testing (SAST) engine that
+bridges the gap between naive regex-based scanners and heavyweight commercial
+tools. It performs **AST-aware, context-sensitive data-flow analysis** across
+multiple programming languages to detect real, high-severity vulnerabilities with
+minimal false positives — entirely on localhost for strict data privacy.
 
----
-
-## 🔬 Core Engine Architecture & Mechanics
-
-`SAST-VULN-SCANNER` bypasses crude regex parsing to avoid systemic performance degradation and computational overhead. The core scanning framework operates via a multi-tiered static code analysis chain:
-
-[Raw Source Code Asset]│
-▼
-[Tokenizer & Structural Semantic Analyzer]│
-▼
-[Signature Vector Evaluation Engine] ───► (Cross-references CWE Global Taxonomies)│
-▼
-[Dynamic Risk Grading Framework]│
-▼
-[Client-Ready HTML Threat Dashboard]
-
-### Key Technical Breakthroughs:
-* **Deterministic Risk Vector Compilation:** Implements zero-false-positive boundary rules by validating code logic context alongside function calls rather than flagging isolated strings.
-* **Asymmetric Risk Scoring Execution:** Automatically categorizes identified structural data vulnerabilities into strict hierarchy zones (Critical, High, Medium, Low) for rapid patch triage.
-* **Low-Overhead Pipeline Design:** Operating on a single thread with absolute minimal external dependencies, the engine generates full production-grade compliance audits under sub-second execution intervals.
+> **Black Hat Europe 2026 Arsenal** submission.
 
 ---
 
-## 🎯 Threat Footprint & CWE Coverage Matrix
+## 🎯 Why this tool is different
 
-The analysis core matches runtime function states directly to official global industry standards maintained by the Mitre Corporation:
+Traditional regex SAST flags isolated strings and drowns developers in false
+positives. This engine:
 
-| Weakness Category | Attack Vector Identifier | Description & Exploitation Vector | Remediation Class |
-| :--- | :--- | :--- | :--- |
-| **Critical** | **CWE-78** (OS Injection) | Unsanitized execution of kernel-level sub-processes via raw string arguments (`os.system`, `subprocess.Popen`). | Structural Parametrization |
-| **Critical** | **CWE-94** (Code Injection) | Runtime processing of arbitrary inputs through structural compilers (`eval`, `exec`). | Dynamic Pattern Elimination |
-| **High** | **CWE-327** (Risky Crypto) | Execution of cryptographically broken algorithms (e.g., MD5, SHA1) within authentication modules. | SHA-256/AES Transition |
-| **High** | **Insecure Deserialization** | Processing unverified external object streams leading directly to remote code execution blocks. | Safe Literal Parsing |
+1. **Parses source into an AST** (Python) for column-accurate detection.
+2. **Performs taint analysis** — a sink (e.g. `os.system`) is only a *real*
+   finding when the data reaching it can be traced to an untrusted source
+   (`request.args`, `$_GET`, `req.query`, `input()`, …).
+3. **Applies sanitizer awareness** — parameterized queries, `sha256`, `secrets`,
+   `htmlspecialchars`, etc. are recognized and suppressed.
+4. **Optionally re-verifies** findings through a fully-local LLM (Ollama),
+   treating scanned code as *untrusted data* (CWE-94 safe by design).
 
 ---
 
-## 🛠️ Deploying the SAST Infrastructure
+## 🧩 Architecture
 
-### 1. Hardening & System Prerequisites
-Ensure your Debian/Kali Linux host infrastructure has an unprivileged runtime profile and the latest interpreter configurations initialized:
-
-```bash
-# Ensure standard system package alignment
-sudo apt-get update && sudo apt-get install python3 python3-pip git -y
+```
+Raw Source Code Assets
+        │
+        ▼
+Tokenize & Detect Language  (11+ languages)
+        │
+        ▼
+AST Structural Analysis  ──►  Python
+        │
+        ▼
+Signature + Taint Evaluation Engine (sources → sinks → sanitizers)
+        │
+        ▼
+Risk Grading (CRITICAL / HIGH / MEDIUM / LOW)
+        │
+        ▼
+Optional Local AI Re-verification (Ollama)
+        │
+        ▼
+Reports → HTML (interactive) · JSON · SARIF 2.1.0
 ```
 
-### 2. Primary Initialization
-Clone the secure repository architecture into your local operational environment:
+---
+
+## 🛡️ Vulnerability coverage matrix
+
+| Severity | Category | CWE |
+|:--|:--|:--|
+| **Critical** | OS Command Injection | CWE-78 |
+| **Critical** | Code Injection | CWE-94 |
+| **Critical** | SQL Injection | CWE-89 |
+| **Critical** | Insecure Deserialization | CWE-502 |
+| **High** | Insecure Cryptography | CWE-327 |
+| **High** | XSS | CWE-79 |
+| **High** | Path Traversal | CWE-22 |
+| **High** | Hardcoded Credential | CWE-798 |
+| **High** | SSRF | CWE-918 |
+| **Medium** | Insecure Randomness | CWE-330 |
+
+---
+
+## 📦 Installation
 
 ```bash
 git clone https://github.com/walimuhamad185/SAST-VULN-SCANNER.git
 cd SAST-VULN-SCANNER
+pip install -r requirements.txt           # core: no external deps
+pip install openai                         # OPTIONAL: only for AI re-verification
 ```
+
+The core engine has **zero mandatory dependencies** (Python 3.8+ standard
+library only). The `openai` package is needed *only* for the optional local LLM
+re-verification via Ollama.
 
 ---
 
-## 🚀 Execution & Command Interface
-
-Execute standard or automated vulnerability audits over your development microservices by initializing `sast_agent.py` against any target script structure:
+## 🚀 Usage
 
 ```bash
-python3 sast_agent.py --file <absolute_path_to_target_source_file>
+python sast_agent.py scan ./my-project                 # scan a folder
+python sast_agent.py scan ./my-project --format all    # HTML + JSON + SARIF
+python sast_agent.py scan app.py --no-ai --format json # deterministic mode
 ```
 
-### High-Risk Production Target Evaluation Example:
+Reports generated:
+- **`sast_security_report.html`** — dark-themed interactive triage dashboard
+- **`sast_security_report.json`** — machine-readable findings
+- **`sast_security_report.sarif`** — SARIF 2.1.0 (GitHub code scanning, GitLab, Azure DevOps)
+
+---
+
+## 🧪 Validation
+
 ```bash
-python3 sast_agent.py --file examples/vulnerable_microservice.py
+python sast_agent.py scan ./tests --format all --no-ai
 ```
 
-### Dynamic Reporting Output:
-Upon checking data inputs, the engine instantiates an active client-ready security audit ledger:
-[✔] Initializing Structural Tokenizer Core...[✔] Compiling Vulnerability Signature Rules Array...[!] ALERT: Detected Critical Injection Pattern matching CWE-78 on line 42.[✔] Verification pass complete. Threat Dashboard generated successfully at: security_report.html
+The engine detects all planted vulnerabilities **and** leaves safe code
+(`sha256`, `secrets.token_hex`, parameterized queries) un-flagged —
+demonstrating low false-positive behavior.
 
 ---
 
-## 📊 Automated Security Audit Dashboards
+## 🔒 Privacy-first design
 
-The execution pipeline outputs a highly visual, production-ready `security_report.html` log matrix engineered for enterprise security operations (SecOps) teams. 
+- **100% local execution** — no cloud telemetry, no data exfiltration.
+- **Optional local LLM** — Ollama runs on your machine; source never leaves.
+- **Prompt-injection safe** — scanned code is sanitized, length-capped, and
+  wrapped in an inert `<user_code>` block; model output is mapped to a strict
+  enum so free-form text can never influence the verdict.
 
-The dashboard provides automated telemetry regarding:
-1. **Systemic Security Footprint:** Global metadata detailing file properties, scan duration, and structural token indexes.
-2. **Aggregated Threat Metrics:** Instant visual identification of systemic exposure levels via an automated risk severity dial.
-3. **Actionable Remediation Logs:** Precise line mapping indicating structural errors coupled with standardized technical guidelines on how to refactor vulnerable code securely.
+---
+
+## 🗺️ Roadmap
+
+- [x] AST parsing (Python)
+- [x] Taint-aware source→sink analysis
+- [x] SARIF 2.1.0 output
+- [x] 11+ language detection
+- [ ] Tree-sitter grammars for full JS/TS/Go AST precision
+- [ ] GitHub Actions CI/CD integration
+- [ ] Auto-fix suggestions
 
 ---
 
-## 🧬 Engineering Contribution & Roadmap
-
-`SAST-VULN-SCANNER` is built with a highly flexible plug-and-play architecture to allow continuous rules updates. Future security tracks include:
-- [ ] Integration of Abstract Syntax Tree (AST) token validation mapping.
-- [ ] Automated CI/CD integration plugins for continuous GitHub Actions deployments.
-- [ ] Language extension modules to scale structural checks to C/C++ and JavaScript codebases.
-
----
-**Core Security Architect:** Wali Muhammad  
-**Project Classification:** Infrastructure Security Automation / Static Application Security Testing (SAST)  
-**Licensing Framework:** Open Source Ecosystem Standard Integration  
-
-EXAMPLE TEST VEDIO :
-https://drive.google.com/file/d/1QPg1jmRbu2BYPSd0GHvdFDYM0PMPURd3/view?usp=sharing
+**Author:** Wali Muhammad  
+**Classification:** Infrastructure Security Automation / SAST  
+**License:** MIT (open source)
