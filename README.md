@@ -3,6 +3,7 @@
   <img src="https://img.shields.io/badge/Languages-11%2B-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Python-3.8%2B-green?style=for-the-badge" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Release-v3.0.0-purple?style=for-the-badge" />
 </p>
 
 <h1 align="center">🛡️ Next-Gen AI-Powered Universal SAST Agent</h1>
@@ -25,17 +26,22 @@ reports findings with exact file paths and line numbers.
 
 ---
 
-## ✨ Key differentiators
+## ✨ Feature set (v3)
 
-| Capability | Naive regex SAST | This engine |
-|:--|:--:|:--:|
-| AST structural analysis | ❌ | ✅ |
-| Taint-aware data-flow (source → sink) | ❌ | ✅ |
-| Sanitizer awareness (suppress `sha256`, parameterized queries) | ❌ | ✅ |
-| CWE + OWASP Top 10 + MITRE ATT&CK mapping | partial | ✅ |
-| SARIF output (GitHub code scanning) | ❌ | ✅ |
-| CI/CD exit codes + quiet mode | ❌ | ✅ |
-| Optional local LLM re-verification (prompt-injection safe) | ❌ | ✅ |
+| # | Feature | What it does |
+|:--|:--|:--|
+| 1 | 🛠️ **Auto-Fix** | Generates a copy-pasteable remediation report per finding (`--autofix`) |
+| 2 | 🧬 **17+ rule classes** | XXE, SSTI, LDAP, Open Redirect, JWT, Log Injection, YAML, SSRF & more |
+| 3 | 🌲 **11+ languages** | Python AST + regex engine for JS/TS/PHP/Ruby/Java/Go/C/C++/C#/Shell |
+| 4 | 🕸️ **Data-flow evidence** | Source → sink path recorded in JSON/Markdown/SARIF reports |
+| 5 | 📦 **PyPI packaging** | `pip install sast-vuln-scanner` (`setup.py` + `pyproject.toml`) |
+| 6 | 📝 **Markdown report** | Clean GitHub/CI-friendly `.md` output |
+| 7 | 🧾 **Baseline scans** | Incremental: report only NEW findings (`--baseline` / `--save-baseline`) |
+| 8 | ⚙️ **Config file** | `sast.yaml` / `sast.json` driven scans (`--config`) |
+| 9 | 🐳 **Docker** | Containerized scanning with OCI labels |
+| 10 | 🔗 **Pre-commit hook** | Run on every commit via `.pre-commit-hooks.yaml` |
+| 11 | 📄 **PDF export** | Render the HTML report to PDF (`--pdf`) |
+| 12 | 📢 **Notifications** | Slack / webhook / email alerts on findings (`--notify`) |
 
 ---
 
@@ -60,27 +66,34 @@ Raw Source Code
  Optional Local AI Re-verification (Ollama, prompt-injection safe)
       │
       ▼
- Reports → HTML (interactive) · JSON · SARIF 2.1.0
+ Reports → HTML · JSON · SARIF 2.1.0 · Markdown · PDF · Auto-Fix
 ```
 
 ---
 
-## 🛡️ Vulnerability coverage
+## 🛡️ Vulnerability coverage (17+ classes)
 
 | Severity | Category | CWE | OWASP 2021 | ATT&CK |
 |:--|:--|:--|:--|:--|
-| 🔴 Critical | OS Command Injection | CWE-78 | A03 Injection | T1059 |
-| 🔴 Critical | Code Injection (eval/exec) | CWE-94 | A03 Injection | T1059 |
-| 🔴 Critical | SQL Injection | CWE-89 | A03 Injection | T1190 |
+| 🔴 Critical | OS Command Injection | CWE-78 | A03 | T1059 |
+| 🔴 Critical | Code Injection (eval/exec) | CWE-94 | A03 | T1059 |
+| 🔴 Critical | SQL Injection | CWE-89 | A03 | T1190 |
 | 🔴 Critical | Insecure Deserialization | CWE-502 | A08 | T1190 |
-| 🟠 High | Insecure Cryptography | CWE-327 | A02 Crypto | T1600 |
-| 🟠 High | Cross-Site Scripting | CWE-79 | A03 Injection | T1189 |
-| 🟠 High | Path Traversal | CWE-22 | A01 Access Control | T1005 |
-| 🟠 High | Hardcoded Credential | CWE-798 | A07 Auth | T1078 |
-| 🟠 High | SSRF | CWE-918 | A10 SSRF | T1190 |
-| 🟡 Medium | Insecure Randomness | CWE-330 | A02 Crypto | T1600 |
+| 🔴 Critical | Insecure YAML Deserialization | CWE-502 | A08 | T1190 |
+| 🔴 Critical | Server-Side Template Injection | CWE-1336 | A03 | T1190 |
+| 🟠 High | Insecure Cryptography | CWE-327 | A02 | T1600 |
+| 🟠 High | Cross-Site Scripting | CWE-79 | A03 | T1189 |
+| 🟠 High | Path Traversal | CWE-22 | A01 | T1005 |
+| 🟠 High | Hardcoded Credential | CWE-798 | A07 | T1078 |
+| 🟠 High | SSRF | CWE-918 | A10 | T1190 |
+| 🟠 High | XML External Entity (XXE) | CWE-611 | A05 | T1190 |
+| 🟠 High | LDAP Injection | CWE-90 | A03 | T1190 |
+| 🟠 High | Insecure JWT | CWE-347 | A07 | T1078 |
+| 🟡 Medium | Insecure Randomness | CWE-330 | A02 | T1600 |
+| 🟡 Medium | Open Redirect | CWE-601 | A01 | T1189 |
+| 🟡 Medium | Log Injection | CWE-117 | A09 | T1562 |
 
-**Languages supported:** Python, JavaScript, TypeScript, PHP, Ruby, Java, Go,
+**Languages:** Python (full AST), JavaScript, TypeScript, PHP, Ruby, Java, Go,
 C, C++, C#, Shell.
 
 ---
@@ -90,50 +103,50 @@ C, C++, C#, Shell.
 ```bash
 git clone https://github.com/walimuhamad185/SAST-VULN-SCANNER.git
 cd SAST-VULN-SCANNER
-pip install -r requirements.txt    # core: zero mandatory deps (Python 3.8+)
-```
 
-- **Core engine** uses only the Python standard library.
-- **Optional AI layer**: `pip install openai` + a running [Ollama](https://ollama.com)
-  instance (fully local). Without it, the engine runs in deterministic mode.
+pip install .            # core (zero mandatory deps)
+pip install .[ai]        # + Ollama AI layer
+pip install .[pdf]       # + PDF export (weasyprint)
+pip install .[all]       # everything
+```
 
 ---
 
 ## 🚀 Usage
 
 ```bash
-# Scan a folder
-python sast_agent.py scan ./src
-
-# Generate all report formats (HTML + JSON + SARIF)
-python sast_agent.py scan ./src --format all
-
-# Deterministic mode (no AI)
-python sast_agent.py scan app.py --no-ai
-
-# Restrict to extensions
-python sast_agent.py scan ./src --extensions .py .js
-
-# CI/CD: quiet mode + severity gate (exit 1 only on HIGH or worse)
-python sast_agent.py scan ./src --quiet --threshold HIGH
+python sast_agent.py scan ./src                    # HTML report
+python sast_agent.py scan ./src --format all       # HTML+JSON+SARIF+MD
+python sast_agent.py scan ./src --autofix          # remediation report
+python sast_agent.py scan ./src --save-baseline    # save baseline
+python sast_agent.py scan ./src --baseline sast_baseline.json   # only NEW
+python sast_agent.py --config sast.yaml            # config-driven
+python sast_agent.py scan ./src --quiet --threshold HIGH --pdf --notify
 ```
 
-### CLI options
+### CLI flags
 
 | Flag | Description |
 |:--|:--|
-| `--format html\|json\|sarif\|all` | Output format (default `html`) |
+| `--format html\|json\|sarif\|markdown\|all` | Output format |
 | `--output -o <path>` | Custom output path |
-| `--no-ai` | Disable AI re-verification (deterministic) |
-| `--extensions -e .py .js` | Restrict scan to extensions |
-| `--threshold -t CRITICAL\|HIGH\|MEDIUM\|LOW` | Severity gate for exit code |
-| `--quiet -q` | Suppress per-finding output (CI/CD) |
+| `--no-ai` | Disable AI re-verification |
+| `--extensions -e .py .js` | Restrict extensions |
+| `--threshold -t CRITICAL\|HIGH\|MEDIUM\|LOW` | Severity gate |
+| `--quiet -q` | CI/CD quiet mode |
+| `--config -c <path>` | Load sast.yaml/json |
+| `--autofix` | Generate auto-fix report |
+| `--baseline <path>` | Incremental scan |
+| `--save-baseline` | Save findings as baseline |
+| `--notify` | Slack/webhook/email alerts |
+| `--pdf` | Export HTML to PDF |
+| `--exclude <glob>` | Exclude paths |
 
-### Exit codes (CI/CD ready)
+### Exit codes
 
 | Code | Meaning |
 |:--|:--|
-| `0` | Scan completed, no findings at/above threshold |
+| `0` | No findings at/above threshold |
 | `1` | Findings found at/above threshold |
 | `2` | Usage / IO / fatal error |
 
@@ -141,37 +154,47 @@ python sast_agent.py scan ./src --quiet --threshold HIGH
 
 ## 🧪 Validation
 
-The repo ships with intentionally-vulnerable targets under `tests/`:
-
 ```bash
 python sast_agent.py scan ./tests --format all --no-ai
 ```
 
-The engine detects **all** planted vulnerabilities (command injection, SQL
-injection, MD5, XSS, pickle deserialization, hardcoded secrets, weak RNG, path
-traversal — across Python and JavaScript) **and** correctly leaves safe code
-(`sha256`, `secrets.token_hex`, parameterized queries) un-flagged.
+Detects **all** planted vulnerabilities and passes safe code (`sha256`,
+`secrets.token_hex`, parameterized queries) with **zero false positives**.
 
 ---
 
-## 🔧 CI/CD integration (GitHub Actions)
+## 🔧 CI/CD & Integrations
 
-Add this to `.github/workflows/sast.yml`:
-
+### GitHub Actions
 ```yaml
-name: SAST
-on: [push, pull_request]
-jobs:
-  sast:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.12' }
-      - run: python sast_agent.py scan . --quiet --threshold HIGH
+- uses: actions/checkout@v4
+- run: pip install .
+- run: sast-agent scan . --quiet --threshold HIGH --format sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with: { sarif_file: sast_security_report.sarif }
 ```
 
-The build fails (exit 1) when HIGH/CRITICAL findings are present.
+### Pre-commit
+```yaml
+repos:
+  - repo: https://github.com/walimuhamad185/SAST-VULN-SCANNER
+    rev: v3.0.0
+    hooks:
+      - id: sast-agent
+```
+
+### Docker
+```bash
+docker build -t sast-agent .
+docker run --rm -v "$PWD:/app" sast-agent scan /app
+```
+
+### Notifications (env vars)
+```bash
+export SAST_SLACK_WEBHOOK_URL="https://hooks.slack.com/..."
+export SAST_WEBHOOK_URL="https://your-api.example/hook"
+export SAST_EMAIL_SMTP_HOST="smtp.gmail.com"
+```
 
 ---
 
@@ -179,23 +202,18 @@ The build fails (exit 1) when HIGH/CRITICAL findings are present.
 
 - **100% local execution** — no cloud telemetry, no data exfiltration.
 - **Optional local LLM** — Ollama runs on your machine; source never leaves.
-- **Prompt-injection safe** — scanned code is sanitized, length-capped, and
-  wrapped in an inert `<user_code>` block; model output is mapped to a strict
-  enum so free-form text can never influence the verdict (CWE-94 safe by design).
+- **Prompt-injection safe** — scanned code is sanitized, length-capped, wrapped
+  in an inert `<user_code>` block; model output mapped to a strict enum.
 
 ---
 
 ## 🗺️ Roadmap
 
-- [x] AST parsing (Python)
-- [x] Taint-aware source → sink analysis
-- [x] CWE + OWASP + ATT&CK mapping
-- [x] SARIF 2.1.0 output
-- [x] CI/CD exit codes + quiet mode
-- [x] 11+ language detection
-- [ ] Tree-sitter grammars for full JS/TS/Go AST precision
-- [ ] Auto-fix suggestions (AI-generated patches)
-- [ ] C/C++ data-flow via LLVM
+- [x] AST parsing (Python), taint data-flow, 17+ rule classes
+- [x] CWE + OWASP + ATT&CK mapping, SARIF 2.1.0
+- [x] Auto-fix, baseline, config file, PDF, notifications, Docker
+- [ ] Native tree-sitter grammars (JS/TS/Go) via optional dependency
+- [ ] Structured multi-file interprocedural data-flow
 
 ---
 
