@@ -93,6 +93,37 @@ class SASTScanner:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 name = _call_name(node)
+                if name in ("cursor.execute", "cursor.executemany", "execute", "executemany",
+                            "connection.execute", "db.execute", "session.execute", "raw"):
+                    for arg in node.args:
+                        if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Mod) and \
+                                _expr_is_tainted(arg.right, tainted_vars):
+                            self._add(path, node.lineno, node.col_offset,
+                                      "SQL Injection", "CWE-89", "CRITICAL",
+                                      lines[node.lineno - 1], "python",
+                                      "SQL built by %-interpolation of user input.",
+                                      _CONF_HIGH, tainted=True, source_lines=source_lines)
+                        if isinstance(arg, (ast.JoinedStr, ast.FormattedValue)) and \
+                                _expr_is_tainted(arg, tainted_vars):
+                            self._add(path, node.lineno, node.col_offset,
+                                      "SQL Injection", "CWE-89", "CRITICAL",
+                                      lines[node.lineno - 1], "python",
+                                      "SQL built by f-string interpolation of user input.",
+                                      _CONF_HIGH, tainted=True, source_lines=source_lines)
+
+            if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod) and \
+                    hasattr(node.left, "value") and isinstance(node.left.value, str) and \
+                    _expr_is_tainted(node.right, tainted_vars) and \
+                    any(k in node.left.value.lower() for k in
+                        ("select", "insert", "update", "delete", "from ")):
+                self._add(path, node.lineno, node.col_offset,
+                          "SQL Injection", "CWE-89", "CRITICAL",
+                          lines[node.lineno - 1], "python",
+                          "SQL string built via %-interpolation of user input.",
+                          _CONF_HIGH, tainted=True, source_lines=source_lines)
+
+            if isinstance(node, ast.Call):
+                name = _call_name(node)
                 if name in ("eval", "exec"):
                     is_t = _call_has_taint(node, tainted_vars)
                     self._add(path, node.lineno, node.col_offset,
@@ -210,8 +241,7 @@ class SASTScanner:
 
             if isinstance(node, ast.Call):
                 name = _call_name(node)
-                if name in ("MD5.new", "SHA1.new", "SHA.new") or (
-                        name.startswith(("Crypto.Hash.MD5", "Crypto.Hash.SHA1"))):
+                if name in ("MD5.new", "SHA1.new") or name.startswith(("Crypto.Hash.MD5", "Crypto.Hash.SHA1")):
                     self._add(path, node.lineno, node.col_offset,
                               "Insecure Cryptography", "CWE-327", "HIGH",
                               lines[node.lineno - 1], "python",
@@ -333,6 +363,13 @@ def _compute_python_taint(src: str, seed: set) -> set:
         tree = ast.parse(src)
     except (SyntaxError, ValueError):
         return tainted
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for a in node.args.args:
+                if a.arg not in ("self", "cls"):
+                    tainted.add(a.arg)
+
     changed = True
     while changed:
         changed = False
