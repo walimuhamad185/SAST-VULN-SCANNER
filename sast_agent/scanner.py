@@ -98,18 +98,26 @@ class SASTScanner:
         for node in ast.walk(tree):
             if isinstance(node, ast.Call):
                 name = _call_name(node)
+                leaf = name.split(".")[-1] if name else ""
                 if name in ("cursor.execute", "cursor.executemany", "execute", "executemany",
-                            "connection.execute", "db.execute", "session.execute", "raw"):
+                            "connection.execute", "db.execute", "session.execute", "raw") \
+                        or leaf in ("execute", "executemany", "executescript", "execute_scalar", "raw") \
+                        or any(k in name for k in (".execute", ".executemany", "text(", "sqlalchemy", "django.db")):
                     for arg in node.args:
-                        if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Mod) and \
-                                _expr_is_tainted(arg.right, tainted_vars):
+                        arg_tainted = False
+                        if isinstance(arg, ast.BinOp) and isinstance(arg.op, (ast.Mod, ast.Add)) and \
+                                (_expr_is_tainted(arg.right, tainted_vars) or _expr_is_tainted(arg.left, tainted_vars)):
+                            arg_tainted = True
+                        elif _expr_is_tainted(arg, tainted_vars):
+                            arg_tainted = True
+                        if arg_tainted and not _sql_is_parameterized(node):
                             self._add(path, node.lineno, node.col_offset,
                                       "SQL Injection", "CWE-89", "CRITICAL",
                                       lines[node.lineno - 1], "python",
-                                      "SQL built by %-interpolation of user input.",
+                                      "SQL built by string interpolation/concatenation of user input.",
                                       _CONF_HIGH, tainted=True, source_lines=source_lines)
                         if isinstance(arg, (ast.JoinedStr, ast.FormattedValue)) and \
-                                _expr_is_tainted(arg, tainted_vars):
+                                _expr_is_tainted(arg, tainted_vars) and not _sql_is_parameterized(node):
                             self._add(path, node.lineno, node.col_offset,
                                       "SQL Injection", "CWE-89", "CRITICAL",
                                       lines[node.lineno - 1], "python",
@@ -551,17 +559,33 @@ def _target_names(t):
     return out
 
 
+def _sql_is_parameterized(node):
+    """Return True if the Sql call binds parameters separately (safe):
+    execute(query, [params]) / execute(query, (p1, p2)) / .format is not
+    parameterization, but a trailing tuple/list/args of bind vars is."""
+    if len(node.args) < 2:
+        return False
+    return isinstance(node.args[-1], (ast.List, ast.Tuple, ast.Dict))
+
+
 def _call_name(node):
     func = node.func
     parts = []
     while isinstance(func, ast.Attribute):
         parts.append(func.attr)
         func = func.value
+        if isinstance(func, ast.Call):
+            # chained call like sqlite3.connect('db').execute(q): resolve the
+            # INNERMOST call and continue walking its receiver so chains are
+            # still attributed to their leaf method name.
+            func = func.func
+            continue
     if isinstance(func, ast.Name):
         parts.append(func.id)
     elif isinstance(func, ast.Call):
-        return ""
-    return ".".join(reversed(parts))
+        inner = _call_name(func)
+        parts.append(inner.split(".")[-1] if inner else "")
+    return ".".join([p for p in reversed(parts) if p])
 
 
 def _call_has_taint(node, tainted_vars):
