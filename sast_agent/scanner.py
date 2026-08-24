@@ -76,6 +76,7 @@ class SASTScanner:
                     tainted_vars.add(v)
 
         if lang == "python":
+            tainted_vars = _compute_python_taint(src, tainted_vars)
             self._scan_python_ast(path, src, lines, tainted_vars, source_lines)
         elif lang in ("javascript", "typescript"):
             self._scan_js(path, lines, tainted_vars, source_lines, lang)
@@ -93,22 +94,33 @@ class SASTScanner:
             if isinstance(node, ast.Call):
                 name = _call_name(node)
                 if name in ("eval", "exec"):
+                    is_t = _call_has_taint(node, tainted_vars)
                     self._add(path, node.lineno, node.col_offset,
-                              "Code Injection (eval/exec)", "CWE-94", "CRITICAL",
+                              "Code Injection (eval/exec)", "CWE-94",
+                              "CRITICAL" if is_t else "HIGH",
                               lines[node.lineno - 1], "python",
-                              f"Dynamic execution of untrusted code via {name}().", _CONF_HIGH)
+                              f"Dynamic execution via {name}() — {'tainted input' if is_t else 'review input source'}.",
+                              _CONF_HIGH if is_t else _CONF_MED,
+                              tainted=is_t, source_lines=source_lines)
                 elif name in ("os.system", "os.popen", "subprocess.call", "subprocess.Popen",
                               "subprocess.run", "subprocess.check_output", "subprocess.check_call",
                               "subprocess.getoutput", "subprocess.getstatusoutput"):
-                    self._add(path, node.lineno, node.col_offset,
-                              "OS Command Injection", "CWE-78", "CRITICAL",
-                              lines[node.lineno - 1], "python",
-                              f"Shell command execution via {name}() — ensure no user input.", _CONF_HIGH)
+                    is_t = _call_has_taint(node, tainted_vars)
+                    if is_t:
+                        self._add(path, node.lineno, node.col_offset,
+                                  "OS Command Injection", "CWE-78", "CRITICAL",
+                                  lines[node.lineno - 1], "python",
+                                  f"Shell command execution via {name}() with tainted input.",
+                                  _CONF_HIGH, tainted=True, source_lines=source_lines)
                 elif name in ("pickle.load", "pickle.loads"):
+                    is_t = _call_has_taint(node, tainted_vars)
                     self._add(path, node.lineno, node.col_offset,
-                              "Insecure Deserialization", "CWE-502", "CRITICAL",
+                              "Insecure Deserialization", "CWE-502",
+                              "CRITICAL" if is_t else "HIGH",
                               lines[node.lineno - 1], "python",
-                              f"Deserializing untrusted data via {name}() is unsafe (use yaml.safe_load / JSON).", _CONF_HIGH)
+                              f"Deserialization via {name}() — safe only on trusted/validated data.",
+                              _CONF_HIGH if is_t else _CONF_MED,
+                              tainted=is_t, source_lines=source_lines)
                 elif name in ("hashlib.md5", "hashlib.sha1"):
                     self._add(path, node.lineno, node.col_offset,
                               "Insecure Cryptography", "CWE-327", "HIGH",
@@ -258,7 +270,8 @@ class SASTScanner:
         if any(k in p for k in ("os.system", "os.popen", "subprocess", "exec(",
                                 "system(", "popen(", "shell_exec", "passthru",
                                 "runtime.getruntime", "processbuilder", "spawn(",
-                                "execsync", "execlp", "execvp", "execv", "command")):
+                                "execsync", "execlp", "execvp", "execv", "command",
+                                "child_process")):
             return "OS Command Injection"
         if "eval" in p or "exec(" in p or "function(" in p:
             return "Code Injection (eval/exec)"
@@ -311,6 +324,50 @@ class SASTScanner:
                                 "console.error", "log.println")):
             return "Log Injection"
         return "OS Command Injection"
+
+
+def _compute_python_taint(src: str, seed: set) -> set:
+    """Propagate taint transitively across the AST via fixed-point analysis."""
+    tainted = set(seed or [])
+    try:
+        tree = ast.parse(src)
+    except (SyntaxError, ValueError):
+        return tainted
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign):
+                value_tainted = _expr_is_tainted(node.value, tainted)
+                for t in node.targets:
+                    for name in _target_names(t):
+                        if value_tainted and name not in tainted:
+                            tainted.add(name)
+                            changed = True
+            elif isinstance(node, ast.AnnAssign) and node.value is not None:
+                if _expr_is_tainted(node.value, tainted):
+                    for name in _target_names(node.target):
+                        if name not in tainted:
+                            tainted.add(name)
+                            changed = True
+            elif isinstance(node, ast.AugAssign):
+                names = _target_names(node.target)
+                if _expr_is_tainted(node.value, tainted) or any(n in tainted for n in names):
+                    for name in names:
+                        if name not in tainted:
+                            tainted.add(name)
+                            changed = True
+    return tainted
+
+
+def _target_names(t):
+    out = []
+    if isinstance(t, ast.Name):
+        out.append(t.id)
+    elif isinstance(t, (ast.Tuple, ast.List)):
+        for el in t.elts:
+            out.extend(_target_names(el))
+    return out
 
 
 def _call_name(node):
