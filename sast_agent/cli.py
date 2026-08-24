@@ -99,15 +99,15 @@ def main(argv=None):
                 f.analysis = analysis
                 verified.append(f)
                 if not quiet:
-                    print(f"  \033[91m[{idx}/{raw_total}] VERIFIED THREAT\033[0m — {f.rule} @ {f.file}:{f.line}")
+                    print(f"  \x1b[91m[{idx}/{raw_total}] VERIFIED THREAT\x1b[0m — {f.rule} @ {f.file}:{f.line}")
             elif verdict == "INCONCLUSIVE":
                 f.analysis = "INCONCLUSIVE: manual review required."
                 verified.append(f)
                 if not quiet:
-                    print(f"  \033[93m[{idx}/{raw_total}] INCONCLUSIVE\033[0m — {f.rule} @ {f.file}:{f.line}")
+                    print(f"  \x1b[93m[{idx}/{raw_total}] INCONCLUSIVE\x1b[0m — {f.rule} @ {f.file}:{f.line}")
             else:
                 if not quiet:
-                    print(f"  \033[92m[{idx}/{raw_total}] FILTERED (false alarm)\033[0m — {f.rule}")
+                    print(f"  \x1b[92m[{idx}/{raw_total}] FILTERED (false alarm)\x1b[0m — {f.rule}")
 
     if args.baseline or args.save_baseline:
         bpath = args.baseline or cfg.get("baseline") or "sast_baseline.json"
@@ -119,6 +119,11 @@ def main(argv=None):
             baseline.save_baseline(bpath, verified)
             if not quiet:
                 print(f"[+] Baseline saved to {bpath}")
+
+    # Apply the severity threshold to the findings that are both reported
+    # AND counted toward the exit code, so `--threshold CRITICAL` yields a
+    # CRITICAL-only report (not just a filtered exit status).
+    verified = [f for f in verified if _meets_threshold(f.severity, threshold)]
 
     out_path = args.output or cfg.get("output")
     written = []
@@ -173,8 +178,7 @@ def main(argv=None):
             sent = res.get("sent", [])
             print(f"[+] Notifications: {', '.join(sent) if sent else 'none configured'}")
 
-    actionable = [f for f in verified if _meets_threshold(f.severity, threshold)]
-    return EXIT_FINDINGS if actionable else EXIT_OK
+    return EXIT_FINDINGS if verified else EXIT_OK
 
 
 def _tail(out_path, ext, default):
