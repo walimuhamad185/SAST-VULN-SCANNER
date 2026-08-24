@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/Languages-11%2B-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Python-3.8%2B-green?style=for-the-badge" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Release-v3.0.0-purple?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Release-v3.0.4-purple?style=for-the-badge" />
 </p>
 
 <h1 align="center">🛡️ Next-Gen AI-Powered Universal SAST Agent</h1>
@@ -178,7 +178,7 @@ Detects **all** planted vulnerabilities and passes safe code (`sha256`,
 ```yaml
 repos:
   - repo: https://github.com/walimuhamad185/SAST-VULN-SCANNER
-    rev: v3.0.0
+    rev: v3.0.4
     hooks:
       - id: sast-agent
 ```
