@@ -16,6 +16,7 @@ from .config import (
 from .models import Finding
 from .rules import RULES, SINKS, SANITIZERS
 from . import taint as taintmod
+from .taint import SOURCES as _SOURCES
 
 _CONF_HIGH = "HIGH"
 _CONF_MED = "MEDIUM"
@@ -138,13 +139,29 @@ class SASTScanner:
                 elif name in ("os.system", "os.popen", "subprocess.call", "subprocess.Popen",
                               "subprocess.run", "subprocess.check_output", "subprocess.check_call",
                               "subprocess.getoutput", "subprocess.getstatusoutput"):
-                    is_t = _call_has_taint(node, tainted_vars)
-                    if is_t:
-                        self._add(path, node.lineno, node.col_offset,
-                                  "OS Command Injection", "CWE-78", "CRITICAL",
-                                  lines[node.lineno - 1], "python",
-                                  f"Shell command execution via {name}() with tainted input.",
-                                  _CONF_HIGH, tainted=True, source_lines=source_lines)
+                    # list-form (shell=False) is a sanitizer for command injection:
+                    # subprocess.call(["echo", user]) passes args without a shell, so it
+                    # is only dangerous if a tainted STRING is concatenated into the list,
+                    # or the whole command is a tainted string (shell=True usage).
+                    if len(node.args) and isinstance(node.args[0], (ast.List, ast.Tuple)):
+                        # list-form: only flag if a list ELEMENT itself is a tainted
+                        # string/expression (not just a tainted var name reference).
+                        dangerous = _list_has_tainted_string(node.args[0], tainted_vars)
+                        if dangerous:
+                            self._add(path, node.lineno, node.col_offset,
+                                      "OS Command Injection", "CWE-78", "CRITICAL",
+                                      lines[node.lineno - 1], "python",
+                                      f"List-form shell command via {name}() mixes a tainted string argument with shell metacharacters.",
+                                      _CONF_HIGH, tainted=True, source_lines=source_lines)
+                        # else: safe (argument vector, no shell) -> no finding
+                    else:
+                        is_t = _call_has_taint(node, tainted_vars)
+                        if is_t:
+                            self._add(path, node.lineno, node.col_offset,
+                                      "OS Command Injection", "CWE-78", "CRITICAL",
+                                      lines[node.lineno - 1], "python",
+                                      f"Shell command execution via {name}() with tainted input.",
+                                      _CONF_HIGH, tainted=True, source_lines=source_lines)
                 elif name in ("pickle.load", "pickle.loads"):
                     is_t = _call_has_taint(node, tainted_vars)
                     self._add(path, node.lineno, node.col_offset,
@@ -307,15 +324,20 @@ class SASTScanner:
             return "OS Command Injection"
         if "eval" in p or "exec(" in p or "function(" in p:
             return "Code Injection (eval/exec)"
+        # XSS BEFORE SQL: res.send(...), document.write, innerHTML etc. and the
+        # tainted vars they reference (req.query/query. inside an XSS sink must
+        # not be mis-attributed as SQL).
+        if any(k in p for k in ("innerhtml", "document.write", "dangerouslyset",
+                                "insertadjacenthtml", "xss", "res.send", "res.write",
+                                "res.end", "response.write", "echo ", "print ",
+                                "\\.(send|write|end)", "res\\.")):
+            return "Cross-Site Scripting (XSS)"
         if any(k in p for k in ("query", "execute(", "mysql", "mysqli", "select",
                                 "where(", "statement", "sqlcommand")):
             return "SQL Injection"
         if any(k in p for k in ("md5", "sha1", "messagedigest", "des", "rc4",
                                 "crypto.", "createmd5", "descryptoserviceprovider", "digest::")):
             return "Insecure Cryptography"
-        if any(k in p for k in ("innerhtml", "document.write", "dangerouslyset",
-                                "echo ", "print ", "response.write", "insertadjacenthtml", "xss")):
-            return "Cross-Site Scripting (XSS)"
         if any(k in p for k in ("pickle", "unserialize", "marshal.load", "objectinputstream",
                                 "readobject", "binaryformatter")):
             return "Insecure Deserialization"
@@ -358,17 +380,62 @@ class SASTScanner:
         return "OS Command Injection"
 
 
+# Functions whose return value is tainted because they return a tainted-returning
+# function's result, or their params (which are tainted) flow to the return.
+def _funcs_that_return_taint(tree, tainted):
+    """Return a set of local function names that RETURN a tainted expression.
+
+    Interprocedural: a function is 'taint-returning' if any Return statement
+    returns a tainted name, a source expression, or a call to another
+    taint-returning function (computed as a fixed point).
+    """
+    funcs = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            funcs[node.name] = node
+
+    returns_taint = set()
+    changed = True
+    while changed:
+        changed = False
+        for fname, fnode in funcs.items():
+            if fname in returns_taint:
+                continue
+            for r in ast.walk(fnode):
+                if isinstance(r, ast.Return) and r.value is not None:
+                    if _expr_is_tainted(r.value, tainted | returns_taint):
+                        returns_taint.add(fname)
+                        changed = True
+    return returns_taint
+
+
 def _compute_python_taint(src: str, seed: set) -> set:
-    """Propagate taint transitively across the AST via fixed-point analysis."""
+    """Propagate taint transitively across the AST via fixed-point analysis.
+
+    Unlike the naive approach, this does NOT blanket-mark every function
+    parameter as tainted. Instead, taint flows only from real sources and
+    is broken by sanitizer calls (strip/escape/etc.)."""
     tainted = set(seed or [])
     try:
         tree = ast.parse(src)
     except (SyntaxError, ValueError):
         return tainted
 
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for a in node.args.args:
+    taint_returns = _funcs_that_return_taint(tree, tainted)
+
+    # Conservative entry-point handling: a function parameter is treated as a
+    # potential taint source ONLY for functions that contain a dangerous sink in
+    # their body. This is the standard SAST heuristic for web handlers /
+    # entry-points where the parameter is externally controlled.
+    _SINK_NAMES = ("os.system", "os.popen", "subprocess.", "eval", "exec",
+                   "pickle.", "yaml.load", "cursor.execute", ".execute(",
+                   "render_template_string", "redirect", "open(", "requests.",
+                   "httpx.", "jinja2.", "child_process", "require(")
+    funcs = {n.name: n for n in ast.walk(tree) if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))}
+    for fname, fnode in funcs.items():
+        body_src = ast.unparse(fnode)
+        if any(k in body_src for k in _SINK_NAMES):
+            for a in fnode.args.args:
                 if a.arg not in ("self", "cls"):
                     tainted.add(a.arg)
 
@@ -377,26 +444,32 @@ def _compute_python_taint(src: str, seed: set) -> set:
         changed = False
         for node in ast.walk(tree):
             if isinstance(node, ast.Assign):
-                value_tainted = _expr_is_tainted(node.value, tainted)
-                for t in node.targets:
-                    for name in _target_names(t):
-                        if value_tainted and name not in tainted:
-                            tainted.add(name)
-                            changed = True
+                value_tainted = _expr_is_tainted(node.value, tainted | taint_returns)
+                if value_tainted:
+                    for t in node.targets:
+                        for name in _target_names(t):
+                            if name not in tainted:
+                                tainted.add(name)
+                                changed = True
+                # independent of value_tainted: re-scan return set since taint changed
+                new_returns = _funcs_that_return_taint(tree, tainted)
+                if new_returns - taint_returns:
+                    taint_returns |= new_returns
+                    changed = True
             elif isinstance(node, ast.AnnAssign) and node.value is not None:
-                if _expr_is_tainted(node.value, tainted):
+                if _expr_is_tainted(node.value, tainted | taint_returns):
                     for name in _target_names(node.target):
                         if name not in tainted:
                             tainted.add(name)
                             changed = True
             elif isinstance(node, ast.AugAssign):
                 names = _target_names(node.target)
-                if _expr_is_tainted(node.value, tainted) or any(n in tainted for n in names):
+                if _expr_is_tainted(node.value, tainted | taint_returns) or any(n in tainted for n in names):
                     for name in names:
                         if name not in tainted:
                             tainted.add(name)
                             changed = True
-    return tainted
+    return tainted | taint_returns
 
 
 def _target_names(t):
@@ -433,15 +506,68 @@ def _call_has_taint(node, tainted_vars):
     return False
 
 
+_SANITIZER_SUFFIXES = ("strip", "lstrip", "rstrip", "escape", "escaped", "trim",
+                       "safe", "clean", "sanitize", "quote", "urlencode",
+                       "html_escape", "escape_html", "encodeURIComponent")
+
+
+def _is_source_call(node):
+    """True if the call is a known taint SOURCE (input(), os.environ, request.*,
+    sys.argv, getenv, readFile, etc.). These introduce taint regardless of args."""
+    name = _call_name(node)
+    if not name:
+        return False
+    leaf = name.split(".")[-1]
+    # direct source functions
+    if leaf in ("input", "raw_input", "getenv", "environ", "argv", "recv",
+                "readline", "get_data", "FieldStorage", "getParameter", "getHeader"):
+        return True
+    if name in ("os.environ", "sys.argv", "os.getenv", "os.popen"):
+        return True
+    if "request." in name or ".query" in name or ".form" in name or ".args" in name:
+        return True
+    if "readFile" in name or "readFileSync" in name:
+        return True
+    return False
+
+
+def _is_sanitizer_call(node):
+    """True if the call is a known sanitizer that removes taint (e.g. .strip(),
+    html.escape()). Hashing/encoding that is security-sensitive is excluded
+    (md5/sha1/hexdigest are NOT sanitizers for sinks)."""
+    name = _call_name(node)
+    if not name:
+        return False
+    leaf = name.split(".")[-1]
+    if leaf in _SANITIZER_SUFFIXES:
+        return True
+    if name in ("markupsafe.escape", "html.escape", "htmlspecialchars", "htmlentities",
+                "cgi.escape", "bleach.clean", "urlquote", "urllib.parse.quote"):
+        return True
+    return False
+
+
 def _expr_is_tainted(expr, tainted):
     if isinstance(expr, ast.Name):
         return expr.id in tainted
+    if isinstance(expr, ast.Constant):
+        # a literal string is never tainted on its own
+        return False
+    if isinstance(expr, ast.Call):
+        # sanitizer calls break taint
+        if _is_sanitizer_call(expr):
+            return False
+        # source calls introduce taint (input(), os.environ, request.*, etc.)
+        if _is_source_call(expr):
+            return True
+        # any other call propagates taint from its args (interprocedural)
+        return any(_expr_is_tainted(a, tainted) for a in expr.args) or \
+               any(_expr_is_tainted(kw.value, tainted) for kw in expr.keywords)
     if isinstance(expr, (ast.BinOp, ast.JoinedStr, ast.FormattedValue)):
         return True
-    if isinstance(expr, ast.Call):
-        return True
     if isinstance(expr, ast.Attribute):
-        return True
+        # .strip().foo etc: attribute access on a sanitized call is safe
+        return _expr_is_tainted(expr.value, tainted)
     if isinstance(expr, (ast.List, ast.Tuple, ast.Set)):
         return any(_expr_is_tainted(e, tainted) for e in expr.elts)
     if isinstance(expr, ast.Dict):
@@ -450,6 +576,20 @@ def _expr_is_tainted(expr, tainted):
                 return True
     if isinstance(expr, ast.IfExp):
         return _expr_is_tainted(expr.body, tainted) or _expr_is_tainted(expr.orelse, tainted)
+    return False
+
+
+def _list_has_tainted_string(lst, tainted):
+    """For list-form shell args: only dangerous if a list ELEMENT is a tainted
+    string-build (BinOp/JoinedStr) or a tainted Name that flows into the command
+    string with shell metacharacters. A sanitized element (.strip etc.) is safe."""
+    for el in lst.elts:
+        if isinstance(el, ast.Name) and el.id in tainted:
+            return True
+        if isinstance(el, (ast.BinOp, ast.JoinedStr, ast.FormattedValue)):
+            return True
+        if isinstance(el, ast.Call) and not _is_sanitizer_call(el):
+            return any(_expr_is_tainted(a, tainted) for a in el.args)
     return False
 
 
