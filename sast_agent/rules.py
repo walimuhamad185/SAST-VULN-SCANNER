@@ -202,19 +202,72 @@ SANITIZERS = {
     "python": [
         r"yaml\.safe_load\s*\(", r"html\.escape\s*\(",
         r"subprocess\.run\s*\(\s*\[[^]]*\]\s*,\s*shell\s*=\s*False",
-        r"parameterized|\?\s*,\s*\[|\?\s*,\s*\(|execute\s*\([^)]*,\s*\[",
-        r"secrets\.token|os\.urandom|random\.SystemRandom",
-        r"hashlib\.sha256|hashlib\.sha3|bcrypt|argon2|pbkdf2",
+        r"secrets\.token_hex|secrets\.token_urlsafe|secrets\.choice",
+        r"hashlib\.(sha256|sha512|sha3_256|pbkdf2_hmac)|bcrypt\.",
+        r"cursor\.execute\s*\([^)]*%s[^)]*,\s*\(|\?\s*,\s*\(",
     ],
     "javascript": [
-        r"escapeHtml|\$\<|textContent|innerText|encodeURIComponent",
-        r"parameterized|\?\s*,\s*\[|prepared\s*statement",
-        r"crypto\.randomBytes|randomUUID|sha256",
+        r"crypto\.createHash\s*\(\s*['\"]sha256|scrypt|pbkdf2|argon2",
+        r"crypto\.randomBytes\s*\(|randomUUID\s*\(",
+        r"escape\s*\(|encodeURIComponent\s*\(",
+        r"exec\s*\(\s*['\"]",
+        r"prepare\s*\(|parameterized",
     ],
     "typescript": [
-        r"escapeHtml|textContent|innerText|encodeURIComponent",
-        r"parameterized|\?\s*,\s*\[|prepared\s*statement",
-        r"crypto\.randomBytes|sha256",
+        r"crypto\.createHash\s*\(\s*['\"]sha256|scrypt|pbkdf2",
+        r"crypto\.randomBytes\s*\(|escape\s*\(|encodeURIComponent\s*\(",
     ],
     "php": [
-        r"htmlspecialchars\s*\(|escape\s*\(
+        r"password_hash\s*\(|password_verify\s*\(",
+        r"htmlspecialchars\s*\(|htmlentities\s*\(",
+        r"mysqli_prepare\s*\(|PDO.*prepare\s*\(|bind_param\s*\(",
+    ],
+    "ruby": [
+        r"BCrypt::Password|Digest::SHA256|Digest::SHA512",
+        r"CGI\.escapeHTML|ERB::Util\.html_escape|sanitize\s*\(",
+    ],
+    "java": [
+        r"MessageDigest\.getInstance\s*\(\s*['\"]SHA-256|BCrypt|PBKDF2",
+        r"PreparedStatement|setString\s*\(|setParameter\s*\(",
+        r"ESAPI\.encoder|StringEscapeUtils\.escapeHtml",
+    ],
+    "go": [
+        r"sha256\.New\s*\(|bcrypt\.|argon2\.",
+        r"db\.QueryContext\s*\([^)]*\?|db\.ExecContext\s*\([^)]*\?",
+        r"html\.EscapeString\s*\(",
+    ],
+    "c": [
+        r"BIO_f_base64|SHA256_Init|openssl/",
+        r"snprintf\s*\(",
+    ],
+    "cpp": [
+        r"std::string|SHA256|sha256|bcrypt",
+    ],
+    "csharp": [
+        r"SHA256\.Create\s*\(|BCrypt|PBKDF2|Rfc2898DeriveBytes",
+        r"SqlParameter|HttpUtility\.HtmlEncode\s*\(",
+    ],
+    "shell": [
+        r"printf\s+['\"]%q|read\s+-r", r"\$\{var//}",
+    ],
+}
+
+REMEDIATION_SNIPPETS = {
+    "OS Command Injection": "Use subprocess.run([...]) with an argument list and shell=False.",
+    "Code Injection (eval/exec)": "Replace eval()/exec() with a safe parser/whitelist lookup.",
+    "SQL Injection": "Use parameterized queries: cursor.execute('... WHERE x = ?', (user_input,)).",
+    "Insecure Cryptography": "Replace with hashlib.sha256() / bcrypt / Argon2; AES-GCM for encryption.",
+    "Cross-Site Scripting (XSS)": "HTML-encode output (escape()/DOMPurify/htmlspecialchars).",
+    "Path Traversal": "Resolve and validate against an allow-list root (os.path.realpath + startswith check).",
+    "Hardcoded Credential": "Load from env: os.getenv('SECRET') / process.env.SECRET / a secrets manager.",
+    "Insecure Deserialization": "Use yaml.safe_load() / JSON with schema validation; never pickle untrusted data.",
+    "Insecure Randomness": "Use secrets.token_hex() / crypto.getRandomValues() / SecureRandom.",
+    "Server-Side Request Forgery": "Allow-list destination hosts; block internal/link-local IPs before fetch.",
+    "XML External Entity (XXE)": "Disable external entities / DTD; use defusedxml (Python).",
+    "Server-Side Template Injection": "Use sandboxed template engine and pass user input as data, not template.",
+    "LDAP Injection": "Escape LDAP special chars and use parameterized LDAP search APIs.",
+    "Open Redirect": "Use an allow-list of safe relative redirect targets.",
+    "Insecure JWT": "Enforce RS256/ES256 and always verify signature server-side.",
+    "Log Injection": "Strip newlines from log input; use structured logging.",
+    "Insecure YAML Deserialization": "Use yaml.safe_load() for untrusted YAML.",
+}
