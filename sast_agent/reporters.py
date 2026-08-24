@@ -3,6 +3,7 @@ import html
 import json
 import datetime
 from .config import SEVERITY_ORDER
+from . import __version__ as _VERSION
 
 
 def to_sarif(findings, target) -> str:
@@ -39,7 +40,7 @@ def to_sarif(findings, target) -> str:
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
         "runs": [{
-            "tool": {"driver": {"name": "SAST-VULN-SCANNER", "version": "3.0.0",
+            "tool": {"driver": {"name": "SAST-VULN-SCANNER", "version": _VERSION,
                                  "rules": rules,
                                  "informationUri": "https://github.com/walimuhamad185/SAST-VULN-SCANNER"}},
             "results": results,
@@ -66,98 +67,54 @@ def to_html(findings, target, raw_total, verified_total) -> str:
     rows = []
     for f in sorted(findings, key=lambda x: SEVERITY_ORDER.get(x.severity, 9)):
         code = html.escape(f.code)
-        owasp = html.escape(f.owasp) if f.owasp else "—"
-        attack = html.escape(f.attack_technique) if f.attack_technique else "—"
+        owasp = html.escape(f.owasp) if f.owasp else "-"
+        df = "".join(f"<span class='chip'>🡒 {html.escape(p)}</span>" for p in f.dataflow[:3])
         rows.append(f"""
         <tr>
-          <td><span class="badge" style="background:{sev_color.get(f.severity,'#6b7280')}">{html.escape(f.severity)}</span>
-              <br><strong>{html.escape(f.rule)}</strong>
-              <div class="tax"><span class="chip cwe">{html.escape(f.cwe)}</span>
-              <span class="chip owasp">{owasp}</span></div></td>
-          <td><code>{html.escape(f.file)}</code><br>
-              <span class="muted">Line {f.line}, col {f.column} · {html.escape(f.language)}</span>
-              <pre><code>{code}</code></pre></td>
-          <td><div class="analysis">{html.escape(f.message)}</div>
-              <div class="conf">Confidence: {html.escape(f.confidence)}</div>
-              <div class="attack">MITRE ATT&amp;CK: {attack}</div></td>
+          <td><span class='sev' style='background:{sev_color.get(f.severity, '#6b7280')}'>{f.severity}</span></td>
+          <td class='rule'>{html.escape(f.rule)}</td>
+          <td><code>{html.escape(f.file)}:{f.line}</code></td>
+          <td class='cwe'>{f.cwe}</td>
+          <td class='owasp'>{owasp}</td>
+          <td class='msg'>{html.escape(f.message)}</td>
+          <td class='df'>{df or '-'}</td>
         </tr>""")
-    body_rows = "\n".join(rows) if rows else (
-        '<tr><td colspan="3" style="text-align:center;padding:40px;color:#16a34a">'
-        '✅ No verified security threats found! Code meets strict compliance standards.</td></tr>'
-    )
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    sev_counts = {}
-    for f in findings:
-        sev_counts[f.severity] = sev_counts.get(f.severity, 0) + 1
-
     return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI-Powered SAST Security Report</title>
+<html lang='en'><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>SAST Security Report</title>
 <style>
-  body {{ font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif; background:#0b1220; color:#e2e8f0; margin:0; }}
-  .container {{ max-width:1320px; margin:auto; padding:30px; }}
-  h1 {{ color:#f1f5f9; border-bottom:2px solid #1e293b; padding-bottom:15px; margin-top:0; }}
-  .stats {{ display:flex; gap:20px; margin:20px 0; flex-wrap:wrap; }}
-  .card {{ flex:1; padding:20px; border-radius:10px; color:#fff; font-weight:bold; text-align:center; min-width:150px; }}
-  .total {{ background:#334155; }} .threats {{ background:#dc2626; }}
-  .crit {{ background:#7f1d1d; }} .high {{ background:#9a3412; }} .med {{ background:#92400e; }}
-  .raw {{ background:#1e3a8a; font-weight:normal; font-size:13px; text-align:left; }}
-  table {{ width:100%; border-collapse:collapse; margin-top:20px; background:#0f172a; border-radius:10px; overflow:hidden; }}
-  th, td {{ padding:14px; text-align:left; border-bottom:1px solid #1e293b; vertical-align:top; }}
-  th {{ background:#1e293b; color:#94a3b8; }}
-  tr:hover {{ background:#1e293b; }}
-  .badge {{ padding:4px 10px; border-radius:4px; font-size:11px; font-weight:bold; text-transform:uppercase; color:#fff; display:inline-block; }}
-  .tax {{ margin-top:8px; }}
-  .chip {{ display:inline-block; padding:2px 8px; border-radius:3px; font-size:11px; margin:2px 2px 0 0; }}
-  .cwe {{ background:#1e293b; color:#7dd3fc; }} .owasp {{ background:#312e81; color:#c7d2fe; }}
-  .muted {{ color:#64748b; font-size:12px; }}
-  .analysis {{ font-size:13px; line-height:1.5; color:#cbd5e1; }}
-  .conf {{ font-size:11px; color:#64748b; margin-top:10px; }}
-  .attack {{ font-size:11px; color:#93c5fd; margin-top:4px; }}
-  pre {{ background:#0b1120; color:#7dd3fc; padding:10px; border-radius:6px; overflow-x:auto; font-family:'Courier New',monospace; font-size:12px; margin-top:8px; }}
-  code {{ word-break:break-all; }}
-  .legend {{ color:#64748b; font-size:12px; margin-top:12px; }}
-</style>
-</head>
-<body>
-<div class="container">
-  <h1>🛡️ Next-Gen AI-Powered SAST Security Report</h1>
-  <div class="stats">
-    <div class="card total">Potential Concerns Found<br><span style="font-size:28px">{raw_total}</span></div>
-    <div class="card threats">Verified Actionable Threats<br><span style="font-size:28px">{verified_total}</span></div>
-    <div class="card crit">Critical<br><span style="font-size:28px">{sev_counts.get('CRITICAL', 0)}</span></div>
-    <div class="card high">High<br><span style="font-size:28px">{sev_counts.get('HIGH', 0)}</span></div>
-    <div class="card med">Medium<br><span style="font-size:28px">{sev_counts.get('MEDIUM', 0)}</span></div>
-    <div class="card raw"><strong>Target:</strong> {html.escape(target)}<br><strong>Scan Date:</strong> {now}</div>
+:root {{ color-scheme: dark; }}
+body {{ margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+       background:#0b0f17; color:#e2e8f0; }}
+header {{ padding:24px 28px; border-bottom:1px solid #1e293b; background:linear-gradient(180deg,#111827,#0b0f17); }}
+h1 {{ margin:0 0 4px; font-size:22px; }}
+.sub {{ color:#64748b; font-size:13px; }}
+.badge {{ display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px;
+          background:#1e293b; color:#cbd5e1; margin-right:6px; }}
+.badge.crit {{ background:#7f1d1d; color:#fecaca; }}
+table {{ width:100%; border-collapse:collapse; font-size:13px; }}
+th {{ text-align:left; padding:10px 14px; background:#111827; color:#94a3b8;
+      font-size:11px; text-transform:uppercase; letter-spacing:.05em;
+      border-bottom:1px solid #1e293b; }}
+td {{ padding:10px 14px; border-bottom:1px solid #1e293b; vertical-align:top; }}
+.sev {{ padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; color:#fff; }}
+.code {{ font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; color:#93c5fd; }}
+.cwe {{ color:#fbbf24; }} .owasp {{ color:#a78bfa; }} .msg {{ color:#cbd5e1; }}
+.df {{ color:#34d399; font-size:11px; }} .chip {{ display:block; }}
+</style></head><body>
+<header>
+  <h1>🛡️ SAST-VULN-SCANNER — Security Report</h1>
+  <div class='sub'>Target: <code>{html.escape(target)}</code> · {verified_total} verified threat(s) · {raw_total} raw concern(s)</div>
+  <div style='margin-top:8px'>
+    <span class='badge crit'>{verified_total} findings</span>
+    <span class='badge'>SARIF 2.1.0</span>
+    <span class='badge'>CWE · OWASP 2021 · ATT&amp;CK</span>
   </div>
-  <table>
-    <thead><tr>
-      <th style="width:22%">Vulnerability</th>
-      <th style="width:40%">File &amp; Location</th>
-      <th style="width:38%">AI Security Analysis &amp; Remediation</th>
-    </tr></thead>
-    <tbody>{body_rows}</tbody>
-  </table>
-  <p class="legend">CWE + OWASP Top 10 (2021) + MITRE ATT&amp;CK mapping provided for every finding.</p>
-</div>
-</body>
-</html>"""
-
-
-def to_json(findings, target) -> str:
-    out = {
-        "tool": "SAST-VULN-SCANNER",
-        "version": "3.0.0",
-        "target": target,
-        "scan_date": datetime.datetime.now().isoformat(),
-        "finding_count": len(findings),
-        "severity_summary": _severity_summary(findings),
-        "findings": [f.to_dict() for f in findings],
-    }
-    return json.dumps(out, indent=2)
+</header>
+<table><thead><tr><th>Severity</th><th>Rule</th><th>Location</th><th>CWE</th><th>OWASP</th><th>Message</th><th>Data-flow</th></tr></thead>
+<tbody>{''.join(rows)}</tbody></table>
+</body></html>"""
 
 
 def _severity_summary(findings) -> dict:
@@ -167,38 +124,30 @@ def _severity_summary(findings) -> dict:
     return s
 
 
+def to_json(findings, target) -> str:
+    out = {
+        "tool": "SAST-VULN-SCANNER",
+        "version": _VERSION,
+        "target": target,
+        "scan_date": datetime.datetime.now().isoformat(),
+        "finding_count": len(findings),
+        "severity_summary": _severity_summary(findings),
+        "findings": [f.to_dict() for f in findings],
+    }
+    return json.dumps(out, indent=2)
+
+
 def to_markdown(findings, target) -> str:
-    """Render a clean Markdown report (GitHub/CI friendly)."""
-    import datetime
     lines = ["# 🛡️ SAST Security Report", "",
-             f"- **Target:** `{target}`",
-             f"- **Scan date:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-             f"- **Findings:** {len(findings)}", ""]
-    if not findings:
-        lines.append("✅ No verified security threats found.")
-        return "\n".join(lines)
-    summary = _severity_summary(findings)
-    lines.append("## Severity Summary")
-    lines.append("| Severity | Count |")
-    lines.append("|:--|--:|")
-    for sev in ("CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"):
-        lines.append(f"| {sev} | {summary.get(sev, 0)} |")
-    lines.append("")
-    lines.append("## Findings")
+             f"**Target:** `{target}`  ", f"**Findings:** {len(findings)}", ""]
     for f in sorted(findings, key=lambda x: SEVERITY_ORDER.get(x.severity, 9)):
-        lines.append(f"### {f.severity} — {f.rule} ({f.cwe})")
-        owasp = f.owasp or "—"
-        attack = f.attack_technique or "—"
-        lines.append(f"- **Location:** `{f.file}:{f.line}` (col {f.column}) · language `{f.language}`")
-        lines.append(f"- **OWASP:** {owasp} · **MITRE ATT&CK:** {attack} · **Confidence:** {f.confidence}")
+        lines.append(f"### [{f.severity}] {f.rule}")
+        lines.append(f"- **File:** `{f.file}:{f.line}`")
+        lines.append(f"- **CWE:** {f.cwe}  ")
+        if f.owasp:
+            lines.append(f"- **OWASP:** {f.owasp}  ")
+        lines.append(f"- **Message:** {f.message}")
         if f.dataflow:
-            lines.append("- **Dataflow:**")
-            for d in f.dataflow:
-                lines.append(f"  - `{d}`")
-        lines.append("")
-        lines.append("```" + f.language)
-        lines.append(f.code)
-        lines.append("```")
-        lines.append(f"- **Remediation:** {f.message}")
+            lines.append("- **Data-flow:** " + " → ".join(f.dataflow))
         lines.append("")
     return "\n".join(lines)
