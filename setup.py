@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="sast-vuln-scanner",
-    version="3.0.1",
+    version="3.0.4",
     author="Wali Muhammad",
     description="Next-Gen AI-Powered Universal SAST Agent — automated code security audits.",
     long_description=long_description,
