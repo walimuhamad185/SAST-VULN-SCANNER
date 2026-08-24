@@ -3,7 +3,7 @@
   <img src="https://img.shields.io/badge/Languages-11%2B-blue?style=for-the-badge" />
   <img src="https://img.shields.io/badge/Python-3.8%2B-green?style=for-the-badge" />
   <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Release-v3.0.5-purple?style=for-the-badge" />
+  <img src="https://img.shields.io/badge/Release-v3.1.0-purple?style=for-the-badge" />
 </p>
 
 <h1 align="center">🛡️ Next-Gen AI-Powered Universal SAST Agent</h1>
@@ -32,7 +32,7 @@ reports findings with exact file paths and line numbers.
 |:--|:--|:--|
 | 1 | 🛠️ **Auto-Fix** | Generates a copy-pasteable remediation report per finding (`--autofix`) |
 | 2 | 🧬 **17+ rule classes** | XXE, SSTI, LDAP, Open Redirect, JWT, Log Injection, YAML, SSRF & more |
-| 3 | 🌲 **11+ languages** | Python AST + regex engine for JS/TS/PHP/Ruby/Java/Go/C/C++/C#/Shell |
+| 3 | 🌲 **11+ languages** | Full tree-sitter AST for all 11 languages (Python ast + 10 tree-sitter grammars) |
 | 4 | 🕸️ **Data-flow evidence** | Source → sink path recorded in JSON/Markdown/SARIF reports |
 | 5 | 📦 **PyPI packaging** | `pip install sast-vuln-scanner` (`setup.py` + `pyproject.toml`) |
 | 6 | 📝 **Markdown report** | Clean GitHub/CI-friendly `.md` output |
@@ -54,7 +54,7 @@ Raw Source Code
  Language Detection (11+ languages)
       │
       ▼
- AST Structural Analysis ──► Python (ast module)
+ AST Structural Analysis ──► Python (ast) + 10 languages (tree-sitter)
       │
       ▼
  Taint Evaluation Engine (sources → sinks → sanitizers)
@@ -93,8 +93,7 @@ Raw Source Code
 | 🟡 Medium | Open Redirect | CWE-601 | A01 | T1189 |
 | 🟡 Medium | Log Injection | CWE-117 | A09 | T1562 |
 
-**Languages:** Python (full AST), JavaScript, TypeScript, PHP, Ruby, Java, Go,
-C, C++, C#, Shell.
+**Languages:** Python (full AST) + JavaScript, TypeScript, Go, PHP, Ruby, Java, C, C++, C#, Shell (all tree-sitter AST).
 
 ---
 
@@ -178,7 +177,7 @@ Detects **all** planted vulnerabilities and passes safe code (`sha256`,
 ```yaml
 repos:
   - repo: https://github.com/walimuhamad185/SAST-VULN-SCANNER
-    rev: v3.0.5
+    rev: v3.1.0
     hooks:
       - id: sast-agent
 ```
@@ -212,7 +211,7 @@ export SAST_EMAIL_SMTP_HOST="smtp.gmail.com"
 - [x] AST parsing (Python), taint data-flow, 17+ rule classes
 - [x] CWE + OWASP + ATT&CK mapping, SARIF 2.1.0
 - [x] Auto-fix, baseline, config file, PDF, notifications, Docker
-- [ ] Native tree-sitter grammars (JS/TS/Go) via optional dependency
+- [x] Native tree-sitter grammars for all 10 non-Python languages (full AST)
 - [ ] Structured multi-file interprocedural data-flow
 
 ---

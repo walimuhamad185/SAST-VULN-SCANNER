@@ -17,6 +17,8 @@ from .models import Finding
 from .rules import RULES, SINKS, SANITIZERS
 from . import taint as taintmod
 from .taint import SOURCES as _SOURCES
+from . import multilang_ast as multilang_ast_mod
+from . import js_ast as js_ast_mod
 
 _CONF_HIGH = "HIGH"
 _CONF_MED = "MEDIUM"
@@ -267,9 +269,76 @@ class SASTScanner:
                               "Broken cryptographic algorithm in use.", _CONF_HIGH)
 
     def _scan_js(self, path, lines, tainted_vars, source_lines, lang):
+        # Dedicated tree-sitter AST engine for JS/TS (precise, low false positives).
+        scanner = js_ast_mod.JSTSScanner(lang)
+        if scanner.available:
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    src = f.read()
+            except OSError:
+                src = "\n".join(lines)
+            results = scanner.scan(src)
+            seen = set()
+            for r in results:
+                key = (r["rule"], r["line"])
+                if key in seen:
+                    continue
+                seen.add(key)
+                is_t = r["tainted"]
+                conf = _CONF_HIGH if is_t else _CONF_MED
+                line_text = lines[r["line"] - 1] if 0 <= r["line"] - 1 < len(lines) else ""
+                self._add(path, r["line"], r["col"], r["rule"], r["cwe"], r["severity"],
+                          line_text, lang, r["message"], conf,
+                          tainted=is_t, source_lines=source_lines)
+            # still run regex misc for hardcoded credentials etc.
+            self._scan_js_misc(path, lines, tainted_vars, source_lines, lang, seen)
+            return
         self._scan_pattern(path, lines, tainted_vars, source_lines, lang)
 
+    def _scan_js_misc(self, path, lines, tainted_vars, source_lines, lang, seen):
+        sanitizers = SANITIZERS.get(lang, [])
+        for i, line in enumerate(lines, 1):
+            s = line.strip()
+            if not s or s.startswith(("//", "/*", "*", "<!--")):
+                continue
+            if not _search(r"password\s*[:=]|api[_\-]?key\s*[:=]|secret\s*[:=]|token\s*[:=]", s):
+                continue
+            if any(_search(san, s) for san in sanitizers):
+                continue
+            key = ("Hardcoded Credential", i)
+            if key in seen:
+                continue
+            seen.add(key)
+            self._add(path, i, 0, "Hardcoded Credential", "CWE-798", "HIGH", line, lang,
+                      "Move secrets to environment variables or a secrets manager.",
+                      _CONF_HIGH, tainted=False, source_lines=source_lines)
+
     def _scan_pattern(self, path, lines, tainted_vars, source_lines, lang):
+        # Prefer tree-sitter AST (real syntax-tree walk) when a grammar is
+        # installed; fall back to the regex engine otherwise.
+        if lang in multilang_ast_mod._languages():
+            scanner = multilang_ast_mod.MultilangScanner(lang)
+            if scanner.available:
+                try:
+                    with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                        src = f.read()
+                except OSError:
+                    src = "\n".join(lines)
+                results = scanner.scan(src)
+                seen = set()
+                for r in results:
+                    key = (r["rule"], r["line"])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    is_t = r["tainted"]
+                    conf = _CONF_HIGH if is_t else _CONF_MED
+                    line_text = lines[r["line"] - 1] if 0 <= r["line"] - 1 < len(lines) else ""
+                    self._add(path, r["line"], r["col"], r["rule"], r["cwe"], r["severity"],
+                              line_text, lang, r["message"], conf,
+                              tainted=is_t, source_lines=source_lines)
+                return
+
         sinks = SINKS.get(lang, [])
         sanitizers = SANITIZERS.get(lang, [])
         for i, line in enumerate(lines, 1):

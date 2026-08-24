@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="sast-vuln-scanner",
-    version="3.0.5",
+    version="3.1.0",
     author="Wali Muhammad",
     description="Next-Gen AI-Powered Universal SAST Agent — automated code security audits.",
     long_description=long_description,
@@ -24,7 +24,17 @@ setup(
         "ai": ["openai>=1.0.0"],
         "pdf": ["weasyprint"],
         "yaml": ["pyyaml"],
-        "all": ["openai>=1.0.0", "weasyprint", "pyyaml"],
+        "ast": [
+            "tree-sitter>=0.23", "tree-sitter-javascript>=0.23", "tree-sitter-typescript>=0.23",
+            "tree-sitter-go>=0.23", "tree-sitter-php>=0.23", "tree-sitter-ruby>=0.23",
+            "tree-sitter-java>=0.23", "tree-sitter-c>=0.23", "tree-sitter-cpp>=0.23",
+            "tree-sitter-c-sharp>=0.23", "tree-sitter-bash>=0.23",
+        ],
+        "all": ["openai>=1.0.0", "weasyprint", "pyyaml",
+                "tree-sitter>=0.23", "tree-sitter-javascript>=0.23", "tree-sitter-typescript>=0.23",
+                "tree-sitter-go>=0.23", "tree-sitter-php>=0.23", "tree-sitter-ruby>=0.23",
+                "tree-sitter-java>=0.23", "tree-sitter-c>=0.23", "tree-sitter-cpp>=0.23",
+                "tree-sitter-c-sharp>=0.23", "tree-sitter-bash>=0.23"],
     },
     classifiers=[
         "Programming Language :: Python :: 3",

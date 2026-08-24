@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sast-vuln-scanner"
-version = "3.0.5"
+version = "3.1.0"
 description = "Next-Gen AI-Powered Universal SAST Agent"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -15,7 +15,8 @@ authors = [{ name = "Wali Muhammad" }]
 ai = ["openai>=1.0.0"]
 pdf = ["weasyprint"]
 yaml = ["pyyaml"]
-all = ["openai>=1.0.0", "weasyprint", "pyyaml"]
+ast = ["tree-sitter>=0.23", "tree-sitter-javascript>=0.23", "tree-sitter-typescript>=0.23", "tree-sitter-go>=0.23", "tree-sitter-php>=0.23", "tree-sitter-ruby>=0.23", "tree-sitter-java>=0.23", "tree-sitter-c>=0.23", "tree-sitter-cpp>=0.23", "tree-sitter-c-sharp>=0.23", "tree-sitter-bash>=0.23"]
+all = ["openai>=1.0.0", "weasyprint", "pyyaml", "tree-sitter>=0.23", "tree-sitter-javascript>=0.23", "tree-sitter-typescript>=0.23", "tree-sitter-go>=0.23", "tree-sitter-php>=0.23", "tree-sitter-ruby>=0.23", "tree-sitter-java>=0.23", "tree-sitter-c>=0.23", "tree-sitter-cpp>=0.23", "tree-sitter-c-sharp>=0.23", "tree-sitter-bash>=0.23"]
 
 [project.scripts]
 sast-agent = "sast_agent.cli:main"
